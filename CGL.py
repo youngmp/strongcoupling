@@ -204,38 +204,6 @@ class CGL(object):
         self.load_h()
         
         
-    def reduced_ode(self,t,z):
-        """
-        the type of ODE that was used in Wilson 2020. Not good for coupling
-        """
-        
-        th1,psi1,th2,psi2 = z
-        
-        Z1 = np.zeros(2)
-        i1 = np.zeros(2)
-        
-        Z2 = np.zeros(2)
-        i2 = np.zeros(2)
-        
-        for i in range(len(self.zx_callable)):
-            Z1[0] += psi1**i*self.zx_callable[i](th1)
-            Z1[1] += psi1**i*self.zy_callable[i](th1)
-        
-            i1[0] += psi1**i*self.ix_callable[i](th1)
-            i1[1] += psi1**i*self.iy_callable[i](th1)
-            
-            Z2[0] += psi2**i*self.zx_callable[i](th2)
-            Z2[1] += psi2**i*self.zy_callable[i](th2)
-        
-            i2[0] += psi2**i*self.ix_callable[i](th2)
-            i2[1] += psi2**i*self.iy_callable[i](th2)
-        
-        return [1 + np.dot(Z1,[self.g1_callable(th1,th2),self.g1_callable(th1,th2)]),
-                self.kappa*psi1+np.dot(i1,[self.g1_callable(th1,th2),self.g1_callable(th1,th2)]),
-                1 + np.dot(Z2,[self.g1_callable(th2,th1),self.g1_callable(th2,th1)]),
-                self.kappa*psi2+np.dot(i2,[self.g1_callable(th2,th1),self.g1_callable(th2,th1)])]
-        
-        
     def CGL_rhs(self,t,z):
         """
         right-hand side of the equation of interest. CCGL model.
