@@ -78,13 +78,16 @@ class CGL(object):
             'dir':'dat',
             
             'recompute_monodromy':True,
-            'recompute_gh':False,
+            'recompute_g_sym':False,
             'recompute_g':False,
-            'recompute_het':False,
+            'recompute_het_sym':False,
             'recompute_z':False,
             'recompute_i':False,
+            'recompute_k_sym':False,
+            'recompute_p_sym':False,
             'recompute_p':False,
-            'recompute_h_odd':False,
+            'recompute_h_sym':False,
+            'recompute_h':False,
             }
         
         for (prop, default) in defaults.items():
@@ -102,8 +105,11 @@ class CGL(object):
         #self.x,self.y,self.z,self.t = symbols('x1 x2,x3, t')
         #self.f_list, self.x_vars, self.y_vars, self.z_vars = ([] for i in range(4))
         
+        # parameters
+        self.q, self.d = symbols('q d')
+        
         # single-oscillator variables
-        self.x, self.y, self.q, self.t, self.s = symbols('x y q t s')
+        self.x, self.y, self.t, self.s = symbols('x y t s')
         self.tA, self.tB, = symbols('tA tB')
         self.dx, self.dy = symbols('dx dy')
         
@@ -135,6 +141,7 @@ class CGL(object):
         self.LC_y_sym = sym.sin(self.q*self.t)
         
         self.rule_LC = {self.x:self.LC_x,self.y:self.LC_y}
+        self.rule_par = {self.q:self.q_val,self.d:self.d_val}
         
         # filenames and directories
         self.dir = 'cgl_dat/'
@@ -144,19 +151,23 @@ class CGL(object):
         
         self.generate_fnames()
         self.CGL_sym = self.CGL_rhs(0,[self.x,self.y],option='sym')
+        self.CGL_val = self.CGL_rhs(0,[self.x,self.y],option='value')
+        #print(self.CGL_sym)
         
         # symbol J on LC.
-        self.jacLC_sym = Matrix([[diff(self.CGL_sym[0],self.x),diff(self.CGL_sym[0],self.y)],
-                                 [diff(self.CGL_sym[1],self.x),diff(self.CGL_sym[1],self.y)]])
+        self.jacLC_sym = Matrix([[diff(self.CGL_sym[0],self.x),
+                                  diff(self.CGL_sym[0],self.y)],
+                                 [diff(self.CGL_sym[1],self.x),
+                                  diff(self.CGL_sym[1],self.y)]])
         
         self.jacLC_sym = self.jacLC_sym.subs({self.x:self.LC_x,self.y:self.LC_y})
         
         
         # make RHS and Jacobian callable functions
-        self.f = lambdify((self.x,self.y),self.CGL_sym.subs({'q':self.q_val}))
+        self.f = lambdify((self.x,self.y),self.CGL_val)
         
         #jac = sym.lambdify((x1,x2),Jac)
-        self.jacLC = lambdify((self.t),self.jacLC_sym)
+        self.jacLC = lambdify((self.t),self.jacLC_sym.subs({'q':self.q_val}))
         
         # assume gx is the first coordinate of Floquet eigenfunction g
         # brackets denote Taylor expansion functions
@@ -167,11 +178,11 @@ class CGL(object):
         # get monodromy matrix
         self.load_monodromy()
 
-        self.load_gh()  # get heterogeneous terms for g
+        self.load_g_sym()  # get heterogeneous terms for g
         self.load_g()  # get g
         
         #t0 = time.time()
-        self.load_het()
+        self.load_het_sym()
         self.load_z()
         self.load_i()
         
@@ -196,11 +207,12 @@ class CGL(object):
         self.dx_pairB = Matrix([[self.dxB, self.dyB, self.dxA, self.dyA]])
         
         self.generate_coupling_expansions()
-        self.generate_ch()
+        self.load_k_sym()
         
-        self.load_ph()
+        self.load_p_sym()
         self.load_p()
         
+        self.load_h_sym()
         self.load_h()
         
     def CGL_rhs(self,t,z,option='value'):
@@ -223,7 +235,7 @@ class CGL(object):
         if option == 'value':
             return np.array([x*(1-R2)-self.q_val*R2*y,y*(1-R2)+self.q_val*R2*x])
         elif option == 'sym':
-            return Matrix([x*(1-R2)-self.q_val*R2*y,y*(1-R2)+self.q_val*R2*x])
+            return Matrix([x*(1-R2)-self.q*R2*y,y*(1-R2)+self.q*R2*x])
     
     
     def CGL_coupling(self,x1,y1,x2,y2,option='value'):
@@ -247,6 +259,8 @@ class CGL(object):
         
         self.model_params = '_q=' + str(self.q_val)
         
+        self.c_params = '_d=' + str(self.d_val)
+        
         self.sim_params = '_TN='+str(self.TN)
         
         self.monodromy_fname = self.dir+'monodromy_'+self.model_params+self.sim_params+'.txt'
@@ -269,12 +283,40 @@ class CGL(object):
         self.i_fnames = [self.dir+'i_'+str(i)+self.model_params+self.sim_params+'.txt' 
                          for i in range(self.miter)]
         
-        self.pA_fnames = [self.dir+'pA_'+str(i)+self.model_params+'.txt' 
+        self.kxA_fnames = [(self.dir+'kxa_'+str(i)+'.txt')
+                           for i in range(self.miter)]
+        self.kyA_fnames = [(self.dir+'kya_'+str(i)+'.txt')
+                           for i in range(self.miter)]
+        self.kxB_fnames = [(self.dir+'kxb_'+str(i)+'.txt')
+                           for i in range(self.miter)]
+        self.kyB_fnames = [(self.dir+'kyb_'+str(i)+'.txt')
+                           for i in range(self.miter)]
+        
+        self.cA_fname = self.dir+'cA'+'.d'
+        self.cB_fname = self.dir+'cB'+'.d'
+        
+        self.p_rhsA_fnames = [(self.dir+'p_rhsA_'+str(i)+'.d')
+                              for i in range(self.miter)]
+        self.p_rhsB_fnames = [(self.dir+'p_rhsB_'+str(i)+'.d')
+                              for i in range(self.miter)]
+        self.ph_symA_fnames = [(self.dir+'ph_symA_'+str(i)+'.d')
+                               for i in range(self.miter)]
+        self.ph_symB_fnames = [(self.dir+'ph_symB_'+str(i)+'.d')
+                               for i in range(self.miter)]
+        
+        
+        self.pA_fnames = [self.dir+('pA_'+str(i)+self.model_params
+                                    + self.c_params+'.txt')
                           for i in range(self.miter)]
-        self.pB_fnames = [self.dir+'pB_'+str(i)+self.model_params+'.txt' 
+        self.pB_fnames = [self.dir+('pB_'+str(i)+self.model_params+'.txt'
+                                    + self.c_params+'.txt')
                           for i in range(self.miter)]
         
-        self.h_odd_fnames = [self.dir+'h_odd_'+str(i)+self.model_params+'.txt' 
+        self.h_sym_fnames = [(self.dir+'h_sym'+str(i)+'.d')
+                             for i in range(self.miter)]
+        
+        self.h_odd_fnames = [self.dir+('h_odd_'+str(i)+self.model_params+'.txt'
+                                       + self.c_params+'.txt')
                              for i in range(self.miter)]
     
     def generate_reduced_expansions(self):
@@ -354,13 +396,75 @@ class CGL(object):
     
         self.iA = Matrix([[self.ix_epsA],[self.iy_epsA]])
         self.iB = Matrix([[self.ix_epsB],[self.iy_epsB]])
-        
     
-    def generate_ch(self):
+    
+    def load_k_sym(self):
+        # load het. functions h if they exist. otherwise generate.
+        #self.rule_g0 = {sym.Indexed('gx',0):s(0),sym.Indexed('gy',0):s(0)}
+        self.KxA, self.KyA, self.KxB, self.KyB = ([] for i in range(4))
+        
+
+        
+        if self.recompute_k_sym or not(lib.files_exist(self.kxA_fnames,
+                                                       self.kyA_fnames,
+                                                       self.kxB_fnames,
+                                                       self.kyB_fnames,
+                                                       [self.cA_fname,
+                                                        self.cB_fname])):
+            
+            print('* Computing... K')
+            self.generate_k_sym()  # create symbolic derivative
+            
+            self.cA = Matrix([[self.cxA],[self.cyA]])
+            self.cB = Matrix([[self.cxB],[self.cyB]])
+            
+            # dump
+            dill.dump(self.cA,open(self.cA_fname,'wb'),recurse=True)
+            dill.dump(self.cB,open(self.cB_fname,'wb'),recurse=True)
+            
+            self.cxA_collected = collect(expand(self.cxA),self.eps,evaluate=False)
+            self.cyA_collected = collect(expand(self.cyA),self.eps,evaluate=False)
+            self.cxB_collected = collect(expand(self.cxB),self.eps,evaluate=False)
+            self.cyB_collected = collect(expand(self.cyB),self.eps,evaluate=False)
+                
+            for i in range(self.miter):
+                
+                # save each order to list and dill.
+                eps_i_termxA = self.cxA_collected[self.eps**i]
+                eps_i_termyA = self.cyA_collected[self.eps**i]
+                eps_i_termxB = self.cxB_collected[self.eps**i]
+                eps_i_termyB = self.cyB_collected[self.eps**i]
+                
+                self.KxA.append(eps_i_termxA)
+                self.KyA.append(eps_i_termyA)
+                self.KxB.append(eps_i_termxB)
+                self.KyB.append(eps_i_termyB)
+                
+                dill.dump(self.KxA[i],open(self.kxA_fnames[i],'wb'),
+                          recurse=True)
+                dill.dump(self.KyA[i],open(self.kyA_fnames[i],'wb'),
+                          recurse=True)
+                dill.dump(self.KxB[i],open(self.kxB_fnames[i],'wb'),
+                          recurse=True)
+                dill.dump(self.KyB[i],open(self.kyB_fnames[i],'wb'),
+                          recurse=True)
+                
+        else:
+            self.KxA = lib.load_dill(self.kxA_fnames)
+            self.KyA = lib.load_dill(self.kyA_fnames)
+            self.KxB = lib.load_dill(self.kxB_fnames)
+            self.KyB = lib.load_dill(self.kyB_fnames)
+            
+            self.cA = lib.load_dill([self.cA_fname])
+            self.cB = lib.load_dill([self.cB_fname])
+            
+            
+    def generate_k_sym(self):
+        # generate terms involving the coupling term (see K in paper).
         
         # find K_i^{j,k}
-        coupA = self.CGL_coupling(*self.x_pairA)
-        coupB = self.CGL_coupling(*self.x_pairB)
+        coupA = self.CGL_coupling(*self.x_pairA,option='sym')
+        coupB = self.CGL_coupling(*self.x_pairB,option='sym')
         
         cx_symA = coupA[0]
         cy_symA = coupA[1]
@@ -401,121 +505,75 @@ class CGL(object):
         self.cxB = cxB.subs(rule)
         self.cyB = cyB.subs(rule)
         
-        self.cA = Matrix([[self.cxA],[self.cyA]])
-        self.cB = Matrix([[self.cxB],[self.cyB]])
-        
-        # now put in powers of eps
-        self.KxA = []
-        self.KyA = []
-        
-        self.KxB = []
-        self.KyB = []
-        
-        cxA_collected = collect(expand(self.cxA),self.eps)
-        cyA_collected = collect(expand(self.cyA),self.eps)
-        
-        cxB_collected = collect(expand(self.cxB),self.eps)
-        cyB_collected = collect(expand(self.cyB),self.eps)
-        
-        # collect and store into K.
-        for i in range(self.miter):
-            
-            eps_i_termxA = cxA_collected.coeff(self.eps,i)
-            eps_i_termyA = cyA_collected.coeff(self.eps,i)
-            
-            eps_i_termxB = cxB_collected.coeff(self.eps,i)
-            eps_i_termyB = cyB_collected.coeff(self.eps,i)
-            
-            #cA_order = Matrix([[eps_i_termxA],[eps_i_termyA]])
-            #cB_order = Matrix([[eps_i_termxB],[eps_i_termyB]])
-            
-            self.KxA.append(eps_i_termxA)
-            self.KyA.append(eps_i_termyA)
-            
-            self.KxB.append(eps_i_termxB)
-            self.KyB.append(eps_i_termyB)
+        #self.ghx_sym_collected = sym.collect(self.hx[0],self.psi,evaluate=False)
 
-            #print(cA_order)
 
-    def load_ph(self):
+    def load_p_sym(self):
         """
         generate/load the het. terms for psi ODEs.
         """
         
-        self.generate_ph()
+        # load het. functions h if they exist. otherwise generate.
+        self.p_rhsA, self.p_rhsB, self.ph_symA, self.ph_symB = ([] for i in range(4))
         
-    def generate_ph(self):
-        # rename for shortness
-        thA = self.thA
-        thB = self.thB
+        if self.recompute_p_sym or not(lib.files_exist(self.p_rhsA_fnames,
+                                                       self.p_rhsB_fnames,
+                                                       self.ph_symA_fnames,
+                                                       self.ph_symB_fnames)):
+            
+            print('* Computing...ph')
+            self.generate_p_sym()  # create symbolic derivative
+            
+            
+            for i in range(self.miter):
+                # save each order to list and dill.
+                eps_i_termA = self.ircA.coeff(self.eps,i)
+                #eps_i_termA = eps_i_termA.subs(rule)
+                
+                eps_i_termB = self.ircB.coeff(self.eps,i)
+                #eps_i_termB = eps_i_termB.subs(rule)
+                
+                self.p_rhsA.append(eps_i_termA)
+                self.p_rhsB.append(eps_i_termB)
+                
+                self.ph_symA.append(eps_i_termA - self.kap_sym*Indexed('pA',i))
+                self.ph_symB.append(eps_i_termB - self.kap_sym*Indexed('pB',i))
+                
+                dill.dump(self.p_rhsA[i],open(self.p_rhsA_fnames[i],'wb'),
+                          recurse=True)
+                dill.dump(self.p_rhsB[i],open(self.p_rhsB_fnames[i],'wb'),
+                          recurse=True)
+                dill.dump(self.ph_symA[i],open(self.ph_symA_fnames[i],'wb'),
+                          recurse=True)
+                dill.dump(self.ph_symB[i],open(self.ph_symB_fnames[i],'wb'),
+                          recurse=True)
+                
+        else:
+            self.p_rhsA = lib.load_dill(self.p_rhsA_fnames)
+            self.p_rhsB = lib.load_dill(self.p_rhsB_fnames)
+            self.ph_symA = lib.load_dill(self.ph_symA_fnames)
+            self.ph_symB = lib.load_dill(self.ph_symB_fnames)
         
-        #gxs, gys, ixs, iys = (self.gx_imp, self.gy_imp,
-        #                      self.ix_imp, self.iy_imp)
         
-        gxs, gys, ixs, iys = (self.gx_imp, self.gy_imp,
-                              self.ix_imp, self.iy_imp)
+    def generate_p_sym(self):
         
         # collect left and right hand terms
         ircA = self.kap_sym*self.pA + self.eps*self.iA.dot(self.cA)
-        ircA = collect(expand(ircA),self.eps)
+        self.ircA = collect(expand(ircA),self.eps)
         
         ircB = self.kap_sym*self.pB + self.eps*self.iB.dot(self.cB)
-        ircB = collect(expand(ircB),self.eps)
+        self.ircB = collect(expand(ircB),self.eps)
 
-        # create rule for replacing with interpolated functions
-        rule_LC = {'xA':self.LC_xA,'yA':self.LC_yA,
-                   'xB':self.LC_xB,'yB':self.LC_yB}
+
+    def load_p(self):
+        """
+        generate/load the ODEs for psi.
+        """
         
         self.NA = 50
         self.NB = 51
         self.A_array = np.linspace(0,1,self.NA)
         self.B_array = np.linspace(0,1,self.NB)
-        
-        self.A_mg, self.B_mg = np.meshgrid(self.A_array,self.B_array)
-        
-        #print(self.A_mg[0,:])
-        #print(self.B_mg[0,:])
-        
-        rule_ixA = {Indexed('ixA',i):ixs[i](thA) for i in range(self.miter)}
-        rule_iyA = {Indexed('iyA',i):iys[i](thA) for i in range(self.miter)}
-        
-        rule_ixB = {Indexed('ixB',i):ixs[i](thB) for i in range(self.miter)}
-        rule_iyB = {Indexed('iyB',i):iys[i](thB) for i in range(self.miter)}
-        
-        rule = {**rule_LC,
-                **self.rule_g_AB,
-                **rule_ixA,**rule_iyA,
-                **rule_ixB,**rule_iyB}
-    
-        # get list of coeffs up to self.trunc_order order
-        self.p_rhsA = []
-        self.p_rhsB = []
-        
-        self.ph_symA = []
-        self.ph_symB = []
-        
-        
-        for i in range(self.miter):
-            eps_i_termA = ircA.coeff(self.eps,i)
-            eps_i_termA = eps_i_termA.subs(rule)
-            
-            eps_i_termB = ircB.coeff(self.eps,i)
-            eps_i_termB = eps_i_termB.subs(rule)
-            
-            self.p_rhsA.append(eps_i_termA)
-            self.ph_symA.append(eps_i_termA - self.kap_sym*Indexed('pA',i))
-            
-            self.p_rhsB.append(eps_i_termB)
-            self.ph_symB.append(eps_i_termB - self.kap_sym*Indexed('pB',i))
-            
-            #print()
-            #print(self.ph_symA[i])
-        
-        
-    def load_p(self):
-        """
-        generate/load the ODEs for psi.
-        """
         
         self.interval = np.linspace(0,5,100)
         self.ds = (self.interval[-1]-self.interval[0])/len(self.interval)
@@ -535,17 +593,8 @@ class CGL(object):
             print()
             
             # save
-            for i in range(self.miter): 
-                if False:
-                    fig = plt.figure()
-                    ax = fig.gca(projection='3d')
-                    ax.plot_surface(self.A_mg,self.B_mg,
-                                    self.pA_data[i],
-                                    cmap='viridis')
-                    
-                    ax.set_title('plot from save')
+            for i in range(self.miter):
                 
-                print('genmerated pa shape',np.shape(self.pA_data[i]))
                 np.savetxt(self.pA_fnames[i],self.pA_data[i])
                 np.savetxt(self.pB_fnames[i],self.pB_data[i])
         
@@ -585,7 +634,11 @@ class CGL(object):
         ruleA = {sym.Indexed('pA',i):self.pA_imp[i](ta,tb) for i in range(k)}
         ruleB = {sym.Indexed('pB',i):self.pB_imp[i](tb,ta) for i in range(k)}
         
-        rule = {**ruleA, **ruleB}
+        rule = {**ruleA, **ruleB,
+                **self.rule_g_AB,
+                **self.rule_i_AB,
+                **self.rule_LC_AB,
+                **self.rule_par}
         
         ph_impA = self.ph_symA[k].subs(rule)
         ph_impB = self.ph_symB[k].subs(rule)
@@ -598,8 +651,6 @@ class CGL(object):
         
         # no choice but to double loop because of interp2d.
         for i in range(self.NA):
-            #if i % 10 == 1:
-            #    print(k,i/self.N)
                 
             for j in range(self.NB):
                 s = self.interval
@@ -625,26 +676,13 @@ class CGL(object):
             ax.set_xlabel('B')
             ax.set_title('pA sum'+str(k))
             
-        #print(np.shape(pA_data))
         # turn into interpolated 2d function (inputs automatically taken mod T)
         pA_interp = interp2d(self.A_array,self.B_array,pA_data,bounds_error=False)
         pB_interp = interp2d(self.B_array,self.A_array,pB_data,bounds_error=False)
         
-        
-        if False:
-            fig = plt.figure()
-            ax = fig.gca(projection='3d')
-            
-            ax.plot_surface(self.A_mg,self.B_mg,pA_interp(self.A_array,self.B_array),cmap='viridis')
-            ax.view_init(azim=0, elev=90)
-            ax.set_xlabel('A')
-            ax.set_ylabel('B')
-            ax.set_title('pA sum'+str(k))
-        
         pA_imp = implemented_function('pA_'+str(k),self.myFunMod2A(pA_interp))
         pB_imp = implemented_function('pB_'+str(k),self.myFunMod2B(pB_interp))
         
-        #print(pA_imp)
         #self.gx_imp.append(implemented_function('gx_'+str(k),self.myFunMod(fnx)))
         #pA_lam = lambdify([ta,tb],pA_imp)
         #pB_lam = lambdify([tb,ta],pB_imp)
@@ -658,17 +696,12 @@ class CGL(object):
         self.pA_callable.append(pA_interp)
         self.pB_callable.append(pB_interp)
         
-    def load_h(self):
+    def load_h_sym(self):
+        # symbolic h terms
         
-        #self.i_data, self.ix_imp, self.iy_imp = ([] for i in range(3))
-        #self.ix_callable, self.iy_callable = ([] for i in range(2))
-        self.h_odd_data = []
-        self.h_lams = []
-        
-        if self.recompute_h_odd or not(lib.files_exist(self.h_odd_fnames)):
-            ta = self.thA
-            tb = self.thB
+        if self.recompute_h_sym or not(lib.files_exist(self.h_sym_fnames)):
             
+            print('* Computing... H symbolic',end=' ')
             #self.pA = Sum(eps**i_sym*Indexed('pA',i_sym),(i_sym,1,max_idx)).doit()
             rule1 = {Indexed('zx',i):Indexed('zxA',i) for i in range(self.miter)}
             rule2 = {Indexed('zy',i):Indexed('zyA',i) for i in range(self.miter)}
@@ -676,34 +709,54 @@ class CGL(object):
             z_rule = {**rule1,**rule2,**{'psi':self.pA}}
             z = self.z_expansion.subs(z_rule)
             
-            h_collected = sym.collect(sym.expand(self.cA.dot(z)),self.eps)
+            self.h_collected = sym.collect(sym.expand(self.cA.dot(z)),self.eps)
+            self.h_sym = []
             
-            #print(h_collected)
+            for i in range(self.miter):
+                collected = self.h_collected.coeff(self.eps,i)
+                self.h_sym.append(collected)
+                dill.dump(self.h_sym[i],open(self.h_sym_fnames[i],'wb'),
+                          recurse=True)
+                
+        else:
+            self.h_sym = lib.load_dill(self.h_sym_fnames)
             
+            
+    def load_h(self):
+        
+        #self.i_data, self.ix_imp, self.iy_imp = ([] for i in range(3))
+        #self.ix_callable, self.iy_callable = ([] for i in range(2))
+        self.h_odd_data = []
+        self.h_lams = []
+        
+        if self.recompute_h or not(lib.files_exist(self.h_odd_fnames)):
+            
+            print('* Computing...',end=' ')
             rule = {**self.rule_p_AB,
                     **self.rule_g_AB,
                     **self.rule_z_AB,
-                    **self.rule_LC_AB}
-            
+                    **self.rule_LC_AB,
+                    **self.rule_par}
             
             for i in range(self.miter):
                 
-                collected = h_collected.coeff(self.eps,i)
-                collected_and_sub = collected.subs(rule)
-                print(rule)
-                print(collected)
-                print(collected_and_sub)
-                print(i,collected_and_sub.subs({'thA':'t','thB':'t+eta'}))
-                print()
-                h_lam = sym.lambdify([ta,tb],collected_and_sub)
+                collected = self.h_sym[i].subs(rule)
+                
+                ta = self.thA
+                tb = self.thB
+                
+                h_lam = sym.lambdify([ta,tb],collected)
                 self.h_lams.append(h_lam)
                 
-
+            
             for k in range(self.miter):
-                print(k)
+                print('h_'+str(k),end=', ')
                 data = self.generate_h_odd(k)
                 self.h_odd_data.append(data)
                 np.savetxt(self.h_odd_fnames[k],data)
+            print()
+            
+            
         else:
             for k in range(self.miter):
                 self.h_odd_data.append(np.loadtxt(self.h_odd_fnames[k]))
@@ -717,9 +770,6 @@ class CGL(object):
         double counting boundaries in mod operator.
         """
         
-        
-        
-        #p_mg = np.zeros((self.N-1,self.N-1))
         h_mg = np.zeros((self.NB,self.NA))
         
         for i in range(self.NA):
@@ -729,41 +779,11 @@ class CGL(object):
                 
                 h_mg[j,i] = self.h_lams[k](t,t+eta)
                 
-        #print(np.shape(h_mg))
-        #print(np.shape(self.A_mg[:-1,:-1]))
-        
-        if False:
-            fig = plt.figure()
-            ax = fig.gca(projection='3d')
-            #ax.plot_surface(self.A_mg,self.B_mg,
-            #                self.pA_callable[k](self.A_array,self.B_array),
-            #                cmap='viridis')
-            
-            ax.plot_surface(self.A_mg,self.B_mg,
-                            h_mg,
-                            cmap='viridis')
-            ax.set_xlabel('t')
-            ax.set_ylabel('t+eta')
-            ax.set_title('h sum'+str(k))
-        
-        
-        if False:
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            
-            ax.matshow(h_mg,cmap='viridis')
-            
-            ax.set_ylabel('t')
-            ax.set_xlabel('t+eta')
-            ax.set_title('h sum'+str(k))
-            
         # sum along axis to get final form
         h = np.sum(h_mg,axis=1)/(self.NA)
         #print(h)
         #hodd = h
         hodd = (h[::-1]-h)
-        
-        
         
         return hodd
             
@@ -775,20 +795,6 @@ class CGL(object):
         """
         return si.dfitpack.bispeu(fn.tck[0], fn.tck[1], fn.tck[2], fn.tck[3], fn.tck[4], x, y)[0][0]
         
-    def integrand(self,s,fn,inA,inB):
-        
-        return np.exp(self.kappa*s)*self.bispeu(fn,inA-s,inB-s)
-    
-    def load_hfuns(self):
-        pass
-        # get autocorrelation of G with Z
-        #f1 = Matrix([[self.zx_callable[0](A_array)],
-        #             [self.zy_callable[0](A_array)]])
-        
-        #f2 = self.CGL_coupling(x1,y1,x2,y2)
-    
-        #print(f1)
-        #print(self.cA)
 
     def load_monodromy(self):
         """
@@ -803,17 +809,6 @@ class CGL(object):
             
             self.sol = sol.sol(self.tLC).T
             
-            if False:
-            
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                ax.plot(self.tLC,self.sol[:,0])
-                ax.plot(self.tLC,self.sol[:,1])
-                ax.plot(self.tLC,self.sol[:,2])
-                ax.plot(self.tLC,self.sol[:,3])
-                ax.set_title('Monodromy sol')
-                
-                plt.show(block=True)
             
             self.M = np.reshape(self.sol[-1,:],(2,2))
             np.savetxt(self.monodromy_fname,self.M)
@@ -840,31 +835,45 @@ class CGL(object):
         print('Eigenvectors of M',self.eigenvectors[:,0],self.eigenvectors[:,1])
         
         
-    def load_gh(self):
+    def load_g_sym(self):
         # load het. functions h if they exist. otherwise generate.
+        self.rule_g0 = {sym.Indexed('gx',0):s(0),sym.Indexed('gy',0):s(0)}
+        self.ghx_sym, self.ghy_sym = ([] for i in range(2))
         
-        if self.recompute_gh or not(lib.files_exist(self.ghx_fnames,self.ghy_fnames)):
-            self.generate_gh()  # populate ghx_list, ghy_list
-
-            for i in range(self.miter):
-                dill.dump(self.ghx_imp[i],open(self.ghx_fnames[i],'wb'),recurse=True)
-                dill.dump(self.ghy_imp[i],open(self.ghy_fnames[i],'wb'),recurse=True)
-
-        else:
-            self.ghx_imp = lib.load_dill(self.ghx_fnames)
-            self.ghy_imp = lib.load_dill(self.ghy_fnames)
+        if self.recompute_g_sym \
+                or not(lib.files_exist(self.ghx_fnames,self.ghy_fnames)):
+            self.generate_g_sym()  # create symbolic derivative
             
-    def generate_gh(self):
+            
+            for i in range(self.miter):
+                
+                # save each order to list and dill.
+                expr_x = self.ghx_sym_collected[self.psi**i].subs(self.rule_g0)
+                expr_y = self.ghy_sym_collected[self.psi**i].subs(self.rule_g0)
+                
+                self.ghx_sym.append(expr_x)
+                self.ghy_sym.append(expr_y)
+                
+                dill.dump(self.ghx_sym[i],open(self.ghx_fnames[i],'wb'),
+                          recurse=True)
+                dill.dump(self.ghy_sym[i],open(self.ghy_fnames[i],'wb'),
+                          recurse=True)
+                
+        else:
+            self.ghx_sym = lib.load_dill(self.ghx_fnames)
+            self.ghy_sym = lib.load_dill(self.ghy_fnames)
+            
+    def generate_g_sym(self):
         """
         generate heterogeneous terms for the Floquet eigenfunctions g.
+        
+        purely symbolic.
 
         Returns
         -------
-        list of symbolic heterogeneous terms in self.ghx_imp, self.ghy_imp.
+        list of symbolic heterogeneous terms in self.ghx_sym, self.ghy_sym.
 
         """
-        
-        self.ghx_imp, self.ghy_imp = ([] for i in range(2))
         
         # get the general expression for h before plugging in g.
         self.hx = 0
@@ -876,6 +885,7 @@ class CGL(object):
             d1 = lib.vec(lib.df(self.CGL_sym[0],self.x_vec,i))
             d2 = lib.vec(lib.df(self.CGL_sym[1],self.x_vec,i))
             
+            
             self.hx += (1/math.factorial(i)) * np.dot(p,d1)
             self.hy += (1/math.factorial(i)) * np.dot(p,d2)
             
@@ -886,32 +896,15 @@ class CGL(object):
         self.hx = sym.expand(self.hx.subs([(self.dx,self.gx),(self.dy,self.gy)]))
         self.hy = sym.expand(self.hy.subs([(self.dx,self.gx),(self.dy,self.gy)]))
         
-        # collect all psi terms into list of some kind
-        self.tempx = sym.collect(self.hx[0],self.psi,evaluate=False)
-        self.tempy = sym.collect(self.hy[0],self.psi,evaluate=False)
+        # collect all psi terms into dict with psi**k as index.
+        self.ghx_sym_collected = sym.collect(self.hx[0],self.psi,evaluate=False)
+        self.ghy_sym_collected = sym.collect(self.hy[0],self.psi,evaluate=False)
         
-        counter = 0
-        while (counter <= self.miter):
-            # save current term
-            self.ghx_imp.append(self.tempx[self.psi**counter])
-            self.ghy_imp.append(self.tempy[self.psi**counter])
-        
-            counter += 1
-            
-        # substitute limit cycle. maybe move elsewhere.
-        for i in range(len(self.ghx_imp)):
-            self.ghx_imp[i] = self.ghx_imp[i].subs({self.x:self.LC_x,
-                                                    self.y:self.LC_y,
-                                                    sym.Indexed('gx',0):s(0),
-                                                    sym.Indexed('gy',0):s(0)})
-            self.ghy_imp[i] = self.ghy_imp[i].subs({self.x:self.LC_x,
-                                                    self.y:self.LC_y,
-                                                    sym.Indexed('gx',0):s(0),
-                                                    sym.Indexed('gy',0):s(0)})
-            
+    
     def load_g(self):
         
         # load all g or recompute or compute new.
+        
         self.g_data, self.gx_imp, self.gy_imp = ([] for i in range(3))
         self.gx_callable, self.gy_callable = ([] for i in range(2))
 
@@ -951,13 +944,12 @@ class CGL(object):
         
         self.rule_g_AB = {**rule_gxA,**rule_gyA,**rule_gxB,**rule_gyB}
 
-    def generate_g(self,k,max_iter=200,rel_tol=1e-12):
+    def generate_g(self,k):
         # load kth expansion of g for k >= 0
         
         if k == 0:
             # g0 is 0
             
-            #self.g_data.append()
             self.gx_imp.append(implemented_function('gx_0', lambda t: 0))
             self.gy_imp.append(implemented_function('gy_0', lambda t: 0))
             
@@ -965,61 +957,23 @@ class CGL(object):
         
         rulex = {sym.Indexed('gx',i):self.gx_imp[i](self.t) for i in range(k)}
         ruley = {sym.Indexed('gy',i):self.gy_imp[i](self.t) for i in range(k)}
-        rule = {**rulex,**ruley}
         
-        # apply replacement 
-        self.ghx_imp[k] = self.ghx_imp[k].subs(rule)
-        self.ghy_imp[k] = self.ghy_imp[k].subs(rule)
+        rule = {**rulex,**ruley,**self.rule_LC,**self.rule_par}
         
         # lambdify heterogeneous terms for use in integration
-        hetx_lam = lambdify(self.t,self.ghx_imp[k])
-        hety_lam = lambdify(self.t,self.ghy_imp[k])
+        hetx_lam = lambdify(self.t,self.ghx_sym[k].subs(rule))
+        hety_lam = lambdify(self.t,self.ghy_sym[k].subs(rule))
         
         # find intial condtion
         if k == 1:
-            # pick appropriately normalized initial condition.
-            # see pg 5, wilson 2020.
-
-            #init = -self.g1_init*2*np.pi
+            # pick appropriately normalized initial condition.pg 5, wilson 2020.
             init = self.g1_init
-            max_iter = 1
             
         else:
-            init = [0,0]
+            init = lib.run_newton(self,self.dg,[0,0],hetx_lam,hety_lam,k,
+                                  max_iter=200,rel_tol=1e-12,rel_err=10,eps=1e-1)
             
-            # Newton
-            rel_err = 10
-            counter = 0
-            
-            while (rel_err > rel_tol) and (counter < max_iter):
-                dx, sol = lib.get_newton_jac(self.dg,-self.tLC,init,hetx_lam,hety_lam,k,eps=1e-1,
-                                             return_sol=True)
-                
-                rel_err = np.amax(np.abs(sol[-1,:]-sol[0,:]))/np.amax(np.abs(sol))
-                init += dx
-                counter += 1
-
-
-                if False:
-                    
-                    fig = plt.figure()
-                    ax = fig.add_subplot(111)
-                    ax.plot(self.tLC,sol[:,0])
-                    ax.plot(self.tLC,sol[:,1])
-                    ax.set_title('g sol_unpert'+str(k))
-                    plt.show(block=True)
-                    print(counter,rel_err,init)
-                
-                #print(counter,np.amax(np.abs(dx)),dx,rel_tol,k)
-                if counter == max_iter-1:
-                    print('WARNING: max iter reached in newton call')
-                    
         # get full solution
-        
-        #if k == 3:
-        #    #init = [-3.174675640774596852e-01,6.828310976413081157e-01]
-        #    init = [0.4275914,-0.7147441]
-
         sol = solve_ivp(self.dg,[0,-self.tLC[-1]],
                         init,args=(hetx_lam,hety_lam,k),
                         method='RK45',dense_output=True,
@@ -1027,22 +981,11 @@ class CGL(object):
             
         gu = sol.sol(-self.tLC).T[::-1,:]
 
-        if False:
-            
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.plot(self.tLC,gu[:,0])
-            ax.plot(self.tLC,gu[:,1])
-            ax.set_title('gu'+str(k))
-            print('final init',init)
-            plt.show(block=True)
-            
-            #time.sleep(60)
-
         # save soluton as lambda functions
         fnx = interp1d(self.tLC,gu[:,0],fill_value='extrapolate')
         fny = interp1d(self.tLC,gu[:,1],fill_value='extrapolate')
         
+        # save as implemented fns for use in sympy objects
         self.gx_imp.append(implemented_function('gx_'+str(k),self.myFunMod(fnx)))
         self.gy_imp.append(implemented_function('gy_'+str(k),self.myFunMod(fny)))
         
@@ -1101,28 +1044,41 @@ class CGL(object):
         return list1, listx, listy
 
     
-    def load_het(self):
+    def load_het_sym(self):
         # load het. functions h if they exist. otherwise generate.
         
-        if self.recompute_het or \
+        if self.recompute_het_sym or \
                 not(lib.files_exist(self.hetx_fnames,self.hety_fnames,[self.A_fname])):
-            self.generate_het()
             
+            
+            self.hetx_sym, self.hety_sym = ([] for i in range(2))
+            self.generate_het_sym()
+            
+            for i in range(self.miter):
+                
+                # save current term
+                expr_x = self.hetx_powers[self.psi**i].subs(self.rule_g0)
+                expr_y = self.hety_powers[self.psi**i].subs(self.rule_g0)
+                
+                self.hetx_sym.append(expr_x)
+                self.hety_sym.append(expr_y)
+                
+                dill.dump(self.hetx_sym[i],open(self.hetx_fnames[i],'wb'),
+                          recurse=True)
+                dill.dump(self.hety_sym[i],open(self.hety_fnames[i],'wb'),
+                          recurse=True)
+                
             # save matrix of a_i
             dill.dump(self.A,open(self.A_fname,'wb'),recurse=True)
             
-            # save het. terms
-            for i in range(self.miter):
-                dill.dump(self.hetx_list[i],open(self.hetx_fnames[i],'wb'),recurse=True)
-                dill.dump(self.hety_list[i],open(self.hety_fnames[i],'wb'),recurse=True)
 
         else:
             self.A, = lib.load_dill([self.A_fname])
-            self.hetx_list = lib.load_dill(self.hetx_fnames)
-            self.hety_list = lib.load_dill(self.hety_fnames)
+            self.hetx_sym = lib.load_dill(self.hetx_fnames)
+            self.hety_sym = lib.load_dill(self.hety_fnames)
             
             
-    def generate_het(self):
+    def generate_het_sym(self):
         """
         Generate heterogeneous terms for integrating the Z_i and I_i terms.
 
@@ -1132,7 +1088,6 @@ class CGL(object):
 
         """
         
-        self.hetx_list, self.hety_list = ([] for i in range(2))
         # get the general expression for h in z before plugging in g,z.
         
         # column vectors ax ay for use in matrix A = [ax ay]
@@ -1155,9 +1110,7 @@ class CGL(object):
         self.A[:,1] = self.ay
         
         
-        
         het = self.A*self.z_expansion
-        
         
         # expand all terms
         self.hetx = sym.expand(het[0].subs([(self.dx,self.gx),(self.dy,self.gy)]))
@@ -1167,31 +1120,7 @@ class CGL(object):
         self.hetx_powers = sym.collect(self.hetx,self.psi,evaluate=False)
         self.hety_powers = sym.collect(self.hety,self.psi,evaluate=False)
     
-    
-        self.hetx_list = []
-        self.hety_list = []
         
-        counter = 0
-        while (counter <= self.miter):
-            
-            # save current term
-            self.hetx_list.append(self.hetx_powers[self.psi**counter])
-            self.hety_list.append(self.hety_powers[self.psi**counter])
-        
-            counter += 1
-        
-        # substitute limit cycle
-        for i in range(len(self.ghx_imp)):
-            self.hetx_list[i] = self.hetx_list[i].subs({self.x:self.LC_x,
-                                                        self.y:self.LC_y,
-                                                        sym.Indexed('gx',0):s(0),
-                                                        sym.Indexed('gy',0):s(0)})
-            self.hety_list[i] = self.hety_list[i].subs({self.x:self.LC_x,
-                                                        self.y:self.LC_y,
-                                                        sym.Indexed('gx',0):s(0),
-                                                        sym.Indexed('gy',0):s(0)})
-        
-            
     def load_z(self):
         
         # load all g or recompute or compute new.
@@ -1229,73 +1158,34 @@ class CGL(object):
         self.rule_z_AB = {**rule_zxA,**rule_zyA,**rule_zxB,**rule_zyB}
 
 
-    def generate_z(self,k,total_iter=5,rel_tol=1e-4):
+    def generate_z(self,k):
         
         # load kth expansion of g for k >= 1
         rulex = {sym.Indexed('zx',i):self.zx_imp[i](self.t) for i in range(k)}
         ruley = {sym.Indexed('zy',i):self.zy_imp[i](self.t) for i in range(k)}
-        rule = {**rulex,**ruley,**self.rule_g}
+        rule = {**rulex,**ruley,**self.rule_g,**self.rule_LC,**self.rule_par}
         
-        zhx = self.hetx_list[k].subs(rule)
-        zhy = self.hety_list[k].subs(rule)
+        zhx = self.hetx_sym[k].subs(rule)
+        zhy = self.hety_sym[k].subs(rule)
         
         hetx_lam = lambdify(self.t,zhx)
         hety_lam = lambdify(self.t,zhy)
         
         if k == 0:
             init = copy.deepcopy(self.z0_init)
-            max_iter = 1
         else:
-            init = [0,0]
-        
-            # Newton
-            max_iter = 200
-            rel_err = 10
+            init = lib.run_newton(self,self.dz,[0,0],hetx_lam,hety_lam,k,
+                                  max_iter=200,rel_tol=1e-4,rel_err=10,eps=1e-1)
             
-            counter = 0
-            while (rel_err > rel_tol) and (counter < max_iter):
-                
-                dx,sol = lib.get_newton_jac(self.dz,-self.tLC,init,hetx_lam,hety_lam,k,eps=1e-1,
-                                            return_sol=True)
-                
-                rel_err = np.amax(np.abs(sol[-1,:]-sol[0,:]))/np.amax(np.abs(sol))
-                init += dx
-                counter += 1
-                
-                if counter == max_iter-1:
-                    print('WARNING: max iter reached in newton call')
-            
-                if False:
-                    
-                    fig = plt.figure()
-                    ax = fig.add_subplot(111)
-                    ax.plot(self.tLC,sol[:,0])
-                    ax.plot(self.tLC,sol[:,1])
-                    ax.set_title('z sol_unpert'+str(k))
-                    plt.show(block=True)
-                    print(counter,rel_err)
-                    
-                    
         sol = solve_ivp(self.dz,[0,-self.tLC[-1]],init,args=(hetx_lam,hety_lam,k),
                         method='RK45',dense_output=True,
-                        rtol=1e-5,atol=1e-10)
+                        rtol=1e-4,atol=1e-10)
             
         zu = sol.sol(-self.tLC).T[::-1,:]
         
-        
-        if False:
-            
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.plot(self.tLC,zu[:,0])
-            ax.plot(self.tLC,zu[:,1])
-            ax.set_title('zu'+str(k))
-            print('final init',init)
-            plt.show(block=True)
-        
         if k == 0:
             # normalize
-            dLC = lib.rhs([np.cos(0),np.sin(0)],0,self.f)
+            dLC = self.f(np.cos(0),np.sin(0))  # lib.rhs([np.cos(0),np.sin(0)],0,self.f)
             zu = zu/(np.dot(dLC,zu[0,:]))
         
         fnx = interp1d(self.tLC,zu[:,0],fill_value='extrapolate')
@@ -1334,15 +1224,27 @@ class CGL(object):
             self.ix_callable.append(lambdify(self.t,self.ix_imp[i](self.t)))
             self.iy_callable.append(lambdify(self.t,self.iy_imp[i](self.t)))
     
-    def generate_i(self,k,total_iter=5,rel_tol=1e-3):
+        # coupling
+        thA = self.thA
+        thB = self.thB
+        
+        rule_ixA = {Indexed('ixA',i):self.ix_imp[i](thA) for i in range(self.miter)}
+        rule_iyA = {Indexed('iyA',i):self.iy_imp[i](thA) for i in range(self.miter)}
+        
+        rule_ixB = {Indexed('ixB',i):self.ix_imp[i](thB) for i in range(self.miter)}
+        rule_iyB = {Indexed('iyB',i):self.iy_imp[i](thB) for i in range(self.miter)}
+        
+        self.rule_i_AB = {**rule_ixA,**rule_iyA,**rule_ixB,**rule_iyB}
+    
+    def generate_i(self,k):
         
         # load kth expansion of g for k >= 1
         rulex = {sym.Indexed('zx',i):self.ix_imp[i](self.t) for i in range(k)}
         ruley = {sym.Indexed('zy',i):self.iy_imp[i](self.t) for i in range(k)}
-        rule = {**rulex,**ruley,**self.rule_g}
+        rule = {**rulex,**ruley,**self.rule_g,**self.rule_LC,**self.rule_par}
 
-        ihx = self.hetx_list[k].subs(rule)
-        ihy = self.hety_list[k].subs(rule)
+        ihx = self.hetx_sym[k].subs(rule)
+        ihy = self.hety_sym[k].subs(rule)
         
         hetx_lam = lambdify(self.t,ihx)
         hety_lam = lambdify(self.t,ihy)
@@ -1351,33 +1253,12 @@ class CGL(object):
         if k == 0:
             #init = -copy.deepcopy(self.i0_init)/(2*np.pi)
             init = copy.deepcopy(self.i0_init)  # /(2*np.pi)
-            max_iter = 0
             
         else:
-            init = [0,0]
-        
-            # Newton
+            init = lib.run_newton(self,self.di,[0,0],hetx_lam,hety_lam,k,
+                                  max_iter=200,rel_tol=1e-3,rel_err=10,eps=1e-1)
+
             
-            max_iter = 200
-            
-            rel_err = 10
-            
-            counter = 0
-            while (rel_err > rel_tol) and (counter < max_iter):
-                
-                dx,sol = lib.get_newton_jac(self.di,-self.tLC,init,hetx_lam,hety_lam,k,eps=1e-1,
-                                            return_sol=True)
-                
-                rel_err = np.amax(np.abs(sol[-1,:]-sol[0,:]))/np.amax(np.abs(sol))
-                
-                init += dx
-                counter += 1
-                
-                if counter == max_iter-1:
-                    print('WARNING: max iter reached in newton call')
-            
-            
-        
         sol = solve_ivp(self.di,[0,-self.tLC[-1]],init,
                         args=(hetx_lam,hety_lam,k),
                         method='RK45',dense_output=True)
@@ -1479,9 +1360,6 @@ class CGL(object):
         order determines the Taylor expansion term
         """
         
-        #hom = -np.dot(self.jacLC(t).T+self.kappa*(order-1)*self.eye,z)
-        #het = -np.array([hetx(t),hety(t)])
-        
         hom = -np.dot(self.jacLC(t).T+self.kappa*(order-1)*self.eye,z)
         het = -np.array([hetx(t),hety(t)])
         
@@ -1550,15 +1428,18 @@ def main():
             recompute_het=False,
             recompute_z=False,
             recompute_i=False,
-            recompute_ph=False,
+            recompute_k=True,
+            recompute_ph=True,
             recompute_p=False,
-            recompute_h_odd=False,
+            recompute_h=False,
             trunc_order=3,
             trunc_derviative=2,
+            d=1,
             q=2*np.pi)
     
-    #for i in range(a.miter):
-    #    lib.plot(a,'g'+str(i))
+    """
+    for i in range(a.miter):
+        lib.plot(a,'g'+str(i))
         
     for i in range(a.miter):
         lib.plot(a,'z'+str(i))
@@ -1576,17 +1457,28 @@ def main():
     
     lib.plot(a,'surface_z')
     lib.plot(a,'surface_i')
-    
+    """
     
     # check total hodd
     ve = .5
     h = 0
     for i in range(4):
         h += ve**(i+1)*a.h_odd_data[i]
+        
+        
+    # get zeros
+    idxs = np.arange(len(a.A_array))
+    crossing_idx = np.where(np.diff(np.signbit(h)))[0]  # (np.diff(np.sign(h)) != 0)
+    
+    print(np.sign(h))
+    print(crossing_idx)
+    
     
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.plot(h)
+    ax.plot([0,len(h)],[0,0],color='gray')
+    ax.scatter(idxs[crossing_idx],np.zeros(len(idxs[crossing_idx])),color='red')
     
     plt.show(block=True)
     
