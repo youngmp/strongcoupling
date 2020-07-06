@@ -7,6 +7,7 @@ Created on Tue Apr 28 09:49:28 2020
 library functions
 """
 
+import time
 import os
 import dill
 
@@ -54,32 +55,6 @@ def grad(fn,xvec):
         gradf[0,i] = sym.diff(fn,xvec[i])
     
     return gradf
-
-
-def run_newton(obj,fn,init,hetx_lam,hety_lam,k,
-               max_iter=200,rel_tol=1e-12,rel_err=10,eps=1e-1):
-    
-    
-    # run newton's method
-    
-    counter = 0
-    while (rel_err > rel_tol) and (counter < max_iter):
-
-        dx, sol = get_newton_jac(fn,-obj.tLC,init,
-                                 hetx_lam,hety_lam,k,eps=eps,
-                                 return_sol=True)
-        
-        rel_err = np.amax(np.abs(sol[-1,:]-sol[0,:]))/np.amax(np.abs(sol))
-        
-        init += dx
-        counter += 1
-    
-    
-        #print(counter,np.amax(np.abs(dx)),dx,rel_tol,k)
-        if counter == max_iter-1:
-            print('WARNING: max iter reached in newton call')
-            
-    return init
 
 
 def df(fn,xvec,k):
@@ -234,7 +209,51 @@ def load_dill(fnames):
     return templist
 
 
-def get_newton_jac(f,tLC,init,hetx_lam,hety_lam,k,eps=0.1,return_sol=False):
+def run_newton(obj,fn,init,hetx_lam,hety_lam,k,
+               max_iter=200,rel_tol=1e-12,rel_err=10,eps=1e-1,
+               backwards=True):
+        
+    
+    
+
+
+    if backwards:
+        tLC = -obj.tLC
+    else:
+        tLC = obj.tLC
+    # run newton's method
+    counter = 0
+    while (rel_err > rel_tol) and (counter < max_iter):
+        
+        dx, t,sol = get_newton_jac(obj,fn,tLC,init,
+                                   hetx_lam,hety_lam,k,eps=eps,
+                                   return_sol=True)
+        
+        rel_err = np.amax(np.abs(sol[-1,:]-sol[0,:]))/np.amax(np.abs(sol))
+        
+        init += dx
+        counter += 1
+        
+        if False:
+            #print('dx',dx)
+            #print(obj.tLC)
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(sol)
+            plt.show(block=True)
+            time.sleep(2)
+            plt.close()
+        
+            print(rel_err)
+        #print(counter,np.amax(np.abs(dx)),dx,rel_tol,k)
+        if counter == max_iter-1:
+            print('WARNING: max iter reached in newton call')
+            
+    return init
+
+
+def get_newton_jac(obj,fn,tLC,init,hetx_lam,hety_lam,k,eps=0.1,
+                   return_sol=False):
     """
     Newton derivative. for use in newton's method
 
@@ -252,40 +271,65 @@ def get_newton_jac(f,tLC,init,hetx_lam,hety_lam,k,eps=0.1,return_sol=False):
     
     J = np.zeros((n,n))
     
-    #print(k,hetx_lam(1),hety_lam(1))
-    
-    sol = solve_ivp(f,[0,tLC[-1]],init,args=(hetx_lam,hety_lam,k),
-                    method='RK45',dense_output=True,
-                    rtol=1e-4,atol=1e-10)
+    sol = solve_ivp(fn,[0,tLC[-1]],init,args=(hetx_lam,hety_lam,k),
+                    method=obj.method,dense_output=True,
+                    t_eval=tLC,
+                    rtol=obj.rtol,atol=obj.atol)
             
-    sol_unpert = sol.sol(tLC).T
+    sol_unpert = sol.y.T
+    t_unpert = sol.t
     #sol_unpert = odeint(f,init,tLC,args=(hetx_lam,hety_lam,k))
     
-
-
+    
     for p in range(len(init)):
         
         pert = np.zeros(len(init))
         pert[p] = eps
         pert_init = init + pert
         
-        sol = solve_ivp(f,[0,tLC[-1]],pert_init,args=(hetx_lam,hety_lam,k),
-                        method='RK45',dense_output=True,
-                        rtol=1e-4,atol=1e-10)
+        sol = solve_ivp(fn,[0,tLC[-1]],pert_init,args=(hetx_lam,hety_lam,k),
+                        method=obj.method,dense_output=True,
+                        t_eval=tLC,
+                        rtol=obj.rtol,atol=obj.atol)
             
-        sol_pert = sol.sol(tLC).T
+        sol_pert = sol.y.T
         
     
         
         J[:,p] = (sol_pert[-1,:] - sol_unpert[-1,:])/eps
+    
+        if False:
+            #print(obj.tLC)
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(sol_unpert,color='blue')
+            ax.plot(sol_pert)
+            ax.set_title('pert'+str(p))
+            plt.show(block=True)
+            time.sleep(2)
+            plt.close()
+            print(J)
+    
         
     mydiff = sol_unpert[-1,:] - sol_unpert[0,:]
+    
+    if False:
+        arr = np.linspace(0,2*np.pi,100)
+        #print('di',self.di(.7,[.4,.7],hetx_lam,hety_lam,0))
+        print(hetx_lam(arr),hety_lam(arr))
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.plot(fn(arr,[.8,.2],hetx_lam,hety_lam,0))
+        ax.set_title('di')
+        plt.show(block=True)
+        time.sleep(2)
+        plt.close()
     
     dx = -np.dot(np.linalg.inv(J-np.identity(n)), mydiff)
     #print(dx,'\t',mydiff,'\t',J[:,0],J[:,1])
     
     if return_sol:
-        return dx, sol_unpert
+        return dx, t_unpert,sol_unpert
     else:
         return dx
 
@@ -368,8 +412,10 @@ def plot(obj,option='g1'):
         ax.set_title(option)
         
         if k == 0:
-            ax.plot(obj.tLC,np.cos(obj.q_val*obj.tLC)-np.sin(obj.q_val*obj.tLC)/obj.q_val,label='zx true')
-            ax.plot(obj.tLC,np.sin(obj.q_val*obj.tLC)+np.cos(obj.q_val*obj.tLC)/obj.q_val,label='zy true')
+            zx_true = np.cos(obj.q_val*obj.tLC)-np.sin(obj.q_val*obj.tLC)/obj.q_val
+            zy_true = np.sin(obj.q_val*obj.tLC)+np.cos(obj.q_val*obj.tLC)/obj.q_val
+            ax.plot(obj.tLC,zx_true,label='zx true')
+            ax.plot(obj.tLC,zy_true,label='zy true')
             #ax.plot(obj.tLC,obj.z_data[k][:,1],'zy true')
         ax.legend()
         
