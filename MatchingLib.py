@@ -10,6 +10,7 @@ library functions
 import time
 import os
 import dill
+import sys
 
 import numpy as np
 import sympy as sym
@@ -97,6 +98,8 @@ def df(fn,xvec,k):
     
     # f^(1)
     df = grad(df,xvec)
+    #print()
+    #print(np.shape(df))
     #print('df1',df)
     
     # proceed with higher derivs
@@ -115,6 +118,7 @@ def df(fn,xvec,k):
             df_temp[j,:] = grad(df[j,:],xvec)
         
         df = df_temp
+        #print(np.shape(df))
         #print('############ df, i,k',np.shape(df),i,k,df)  
         #print('i,df',i,df)
     
@@ -155,17 +159,64 @@ def monodromy(t,z,jacLC):
     
     jacLC is the jacobian evaluated along the limit cycle
     """
-    #x=z[0];y=z[1]
     
-    #\Phi
+    n = int(np.sqrt(len(z)))
+    z = np.reshape(z,(n,n))
     
-    z = np.reshape(z,(2,2))
-    
+    #print(n)
     dy = np.dot(jacLC(t),z)
     
-    
-    return np.reshape(dy,4)
+    return np.reshape(dy,n*n)
 
+
+def monodromy2(t,z,obj):
+    """
+    calculate right-hand side of system
+    \dot \Phi = J\Phi, \Phi(0)=I
+    \Phi is a matrix solution
+    
+    jacLC is the jacobian evaluated along the limit cycle
+    """
+    
+    #jac = self.jacLC(t)*(order > 0)
+    LC_vec = np.array([obj.LC['lam_v'](t),
+                       obj.LC['lam_h'](t),
+                       obj.LC['lam_r'](t),
+                       obj.LC['lam_w'](t)])
+    
+    jac = obj.numerical_jac(obj.thal_rhs,LC_vec)
+    
+    #print(jac)
+    n = int(np.sqrt(len(z)))
+    z = np.reshape(z,(n,n))
+    
+    #print(n)
+    dy = np.dot(jac,z)
+    
+    return np.reshape(dy,n*n)
+
+
+def monodromy3(t,z,obj):
+    """
+    calculate right-hand side of system
+    \dot \Phi = J\Phi, \Phi(0)=I
+    \Phi is a matrix solution
+    
+    jacLC is the jacobian evaluated along the limit cycle
+    """
+    
+    #jac = self.jacLC(t)*(order > 0)
+    
+    jac = obj.numerical_jac(obj.rhs,obj.LC_vec(t))
+    
+    #print(jac)
+    n = int(np.sqrt(len(z)))
+    z = np.reshape(z,(n,n))
+    
+    #print(n)
+    dy = np.dot(jac,z)
+    
+    return np.reshape(dy,n*n)
 
 def kProd(k,dx):
     """
@@ -183,8 +234,9 @@ def kProd(k,dx):
     return out
 
 
-def files_exist(*fnames):
+def files_exist(*fnames,dictionary=False):
 
+    
     fname_list = []
     for i in range(len(fnames)):
         fname_list += fnames[i]
@@ -198,6 +250,7 @@ def files_exist(*fnames):
         return False
     else:
         return True
+
     
 
 def load_dill(fnames):
@@ -213,10 +266,6 @@ def run_newton(obj,fn,init,hetx_lam,hety_lam,k,
                max_iter=200,rel_tol=1e-12,rel_err=10,eps=1e-1,
                backwards=True):
         
-    
-    
-
-
     if backwards:
         tLC = -obj.tLC
     else:
@@ -252,7 +301,7 @@ def run_newton(obj,fn,init,hetx_lam,hety_lam,k,
     return init
 
 
-def get_newton_jac(obj,fn,tLC,init,hetx_lam,hety_lam,k,eps=0.1,
+def get_newton_jac(obj,fn,tLC,init,hetx_lam=None,hety_lam=None,k=None,eps=0.1,
                    return_sol=False):
     """
     Newton derivative. for use in newton's method
@@ -267,11 +316,17 @@ def get_newton_jac(obj,fn,tLC,init,hetx_lam,hety_lam,k,eps=0.1,
     None.
 
     """
+    
+    if (hetx_lam is not None) and (hety_lam is not None) and (k is not None):
+        args = (hetx_lam,hety_lam,k)
+    else:
+        args = ()
+        
     n = len(init)
     
     J = np.zeros((n,n))
     
-    sol = solve_ivp(fn,[0,tLC[-1]],init,args=(hetx_lam,hety_lam,k),
+    sol = solve_ivp(fn,[0,tLC[-1]],init,args=args,
                     method=obj.method,dense_output=True,
                     t_eval=tLC,
                     rtol=obj.rtol,atol=obj.atol)
@@ -287,7 +342,7 @@ def get_newton_jac(obj,fn,tLC,init,hetx_lam,hety_lam,k,eps=0.1,
         pert[p] = eps
         pert_init = init + pert
         
-        sol = solve_ivp(fn,[0,tLC[-1]],pert_init,args=(hetx_lam,hety_lam,k),
+        sol = solve_ivp(fn,[0,tLC[-1]],pert_init,args=args,
                         method=obj.method,dense_output=True,
                         t_eval=tLC,
                         rtol=obj.rtol,atol=obj.atol)
@@ -356,6 +411,180 @@ def get_newton_jac(obj,fn,tLC,init,hetx_lam,hety_lam,k,eps=0.1,
     """
 
 
+def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
+                rel_tol=1e-12,rel_err=10,backwards=True,eps=1e-1,
+                exception=False,alpha=1):
+    if backwards:
+        tLC = -obj.tLC
+    else:
+        tLC = obj.tLC
+    # run newton's method
+    counter = 0
+    dx = 100
+    
+    try:
+     
+        while (np.linalg.norm(dx) > rel_tol) and (counter < max_iter):
+            
+            dx_prev = dx
+            
+            dx,t,sol = get_newton_jac2(obj,fn,tLC,init,k,het_lams,
+                                       return_sol=True,eps=eps,exception=exception)
+            
+            if np.linalg.norm(dx_prev) < np.linalg.norm(dx):
+                alpha /= 1.3
+            
+            #rel_err = np.amax(np.abs(sol[-1,:]-sol[0,:]))/np.amax(np.abs(sol))
+            
+            init += dx*alpha
+            counter += 1
+            
+            #print(rel_err)
+            
+            if True:
+                fig, axs = plt.subplots(nrows=obj.dim,ncols=1)
+                    
+                for i,ax in enumerate(axs):
+                    key = obj.var_names[i]
+                    ax.plot(sol[:,i],label=key)
+                    ax.legend()
+                 
+                axs[0].set_title('iter'+str(counter))
+                plt.tight_layout()
+                plt.show(block=True)
+                time.sleep(.1)
+                plt.close()
+                
+            if True:
+                #print(sol[0,:],sol[-1,:])
+                print('dx={:.2e}, al={:.2e}'.format(np.linalg.norm(dx),alpha))
+            
+            #print(counter,np.amax(np.abs(dx)),dx,rel_tol,k)
+            if counter == max_iter-1:
+                print('WARNING: max iter reached in newton call')
+                
+    except KeyboardInterrupt:
+        pass
+    return init
+
+
+def get_newton_jac2(obj,fn,tLC,init,k=None,het_lams=None,return_sol=False,
+                    eps=1e-1,exception=False):
+    """
+    Newton derivative. for use in newton's method
+
+    Parameters
+    ----------
+    init : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    if k is not None:
+        args = (k,)
+        if het_lams is not None:
+            args += (het_lams,)
+    else:
+        args = ()
+        
+    #print('args in get_newton_jac2',args)
+    n = len(init)
+    
+    J = np.zeros((n,n))
+    
+    sol = solve_ivp(fn,[0,tLC[-1]],init,args=args,
+                    method=obj.method,dense_output=True,
+                    t_eval=tLC,rtol=obj.rtol,atol=obj.atol)
+                    #rtol=obj.rtol,atol=obj.atol)
+            
+    sol_unpert = sol.y.T
+    t_unpert = sol.t
+    #sol_unpert = odeint(f,init,tLC,args=(hetx_lam,hety_lam,k))
+    
+    #eps = np.zeros(n)
+    
+    #print('unpert final in jac2',sol_unpert[-1,:])
+    
+    n = len(sol_unpert[0,:])
+    
+    y = sol_unpert
+    
+    for p in range(len(init)):
+        
+        #eps = np.amax(np.abs(y[:,p]))-np.amin(np.abs(y[:,p]))+1e-8
+        #eps = np.abs(y[0,p]-y[-1,p])+1e-16
+            
+        pert = np.zeros(len(init))
+        pert[p] = eps
+
+        pert_init = init + pert
+        
+        sol = solve_ivp(fn,[0,tLC[-1]],pert_init,args=args,
+                        method=obj.method,dense_output=True,
+                        t_eval=tLC,rtol=obj.rtol,atol=obj.atol)
+        sol_pert_p = sol.y.T
+        
+        """
+        pert_init = init - pert
+        
+        sol = solve_ivp(fn,[0,tLC[-1]],pert_init,args=args,
+                        method=obj.method,dense_output=True,
+                        t_eval=tLC,rtol=obj.rtol,atol=obj.atol)
+        
+        sol_pert_m = sol.y.T
+        """
+        
+        #J[:,p] = (sol_pert_p[-1,:] - sol_pert_m[-1,:])/(2*eps)
+        J[:,p] = (sol_pert_p[-1,:] - sol_unpert[-1,:])/eps
+    
+        if False:
+            #print(obj.tLC)
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(obj.tLC,sol_unpert[:,p],color='blue')
+            #ax.plot(obj.tLC,sol_pert[:,p])
+            ax.set_title('pert'+str(p))
+            
+            #ax.set_xlim(0,obj.tLC[-1]/10)
+            
+            plt.show(block=True)
+            time.sleep(2)
+            plt.close()
+            #print(J)
+    
+    
+    mydiff = sol_unpert[-1,:] - sol_unpert[0,:]
+    Jdiff = J - np.identity(n)
+    
+    #print('newton jac cond. number',np.linalg.cond(Jdiff))
+    
+    if exception:
+        v = np.zeros((1,n))
+        v[0] = 1
+        Jdiff = np.append(Jdiff,v,axis=0)
+        mydiff = np.append(mydiff,0)
+        dx,residuals,rank,s = np.linalg.lstsq(Jdiff, mydiff)
+    
+    else:
+        dx = np.linalg.solve(Jdiff, mydiff)
+
+    
+    #print('Jdiff,mydiff',Jdiff,mydiff)
+    #print(dx,'\t',mydiff,'\t',J[:,0],J[:,1])
+    #print(dx)
+    
+    if return_sol:
+        return -dx, t_unpert,sol_unpert
+    else:
+        return dx
+
+
+
+
 def fname_suffix(exclude=[],ftype='.png',**kwargs):
     """
     generate filename suffix based on parameters
@@ -377,7 +606,123 @@ def fname_suffix(exclude=[],ftype='.png',**kwargs):
     return fname
 
 
+def load_sols(fnames):
+    """
+    load solutions given list of filenames fnames
 
+    """
+    
+    data_list = []
+    
+    for i in range(len(fnames)):
+        data = np.loadtxt(fnames[i])
+        data_list.append(data)
+        
+    return data_list
+
+
+def generate_fnames(obj,model_pars=''):
+    """
+    each 'fnames' is a dict containing lists. for each key corresponding
+    to the variables in obj.var_names, the list of names correspond
+    to the epsilon  or psi power of approximation.
+    
+    example:
+    g_fname = {'v':['fname for gv0','fname for gv1','fname for gv2'],
+               'h':['fname for gh0','fname for gh1','fname for gh2']}
+    
+    to get the file name for gv1, use
+    
+    g_fname['v'][1]
+    
+    the notation is generalizable and helps
+    keep the code less cluttered.
+    
+    
+    """
+    
+    # coupling parameters
+    c_pars = ''
+    sim_pars = '_TN='+str(obj.TN)
+    
+    obj.monodromy_fname = obj.dir+'monodromy_'+model_pars+sim_pars+'.txt'
+
+    obj.g['dat_fnames'] = [obj.dir+'g_data_'+str(i)\
+                           +model_pars+sim_pars+'.txt' 
+                           for i in range(obj.miter)]
+       
+    obj.z['dat_fnames'] = [obj.dir+'z_data_'+str(i)\
+                           +model_pars+sim_pars+'.txt' 
+                           for i in range(obj.miter)]
+
+    obj.i['dat_fnames'] = [obj.dir+'i_data_'+str(i)\
+                           +model_pars+sim_pars+'.txt' 
+                           for i in range(obj.miter)]
+    
+    for key in obj.var_names:
+        obj.g[key+'_epsA_fname'] = (obj.dir+'g_epsA_'+key+'_miter='
+                                    +str(obj.miter)+'.d')
+        obj.g[key+'_epsB_fname'] = (obj.dir+'g_epsB_'+key+'_miter='
+                                    +str(obj.miter)+'.d')
+        
+        obj.i[key+'_epsA_fname'] = (obj.dir+'i_epsA_'+key+'_miter='
+                                    +str(obj.miter)+'.d')
+        obj.i[key+'_epsB_fname'] = (obj.dir+'i_epsB_'+key+'_miter='
+                                    +str(obj.miter)+'.d')
+    
+    for key in obj.var_names:
+        obj.g['sym_fnames_'+key] = [obj.dir+'g_sym_'+key+'_'+str(i)+'.d' 
+                                   for i in range(obj.miter)]
+        
+        obj.z['sym_fnames_'+key] = [obj.dir+'z_sym_'+key+'_'+str(i)+'.d' 
+                                       for i in range(obj.miter)]
+
+        obj.i['sym_fnames_'+key] = [obj.dir+'i_sym_'+key+'_'+str(i)+'.d' 
+                                       for i in range(obj.miter)]
+        
+        obj.kA['sym_fnames_'+key] = [obj.dir+'kA_sym_'+key+'_'+str(i)+'.d' 
+                                     for i in range(obj.miter)]
+            
+        obj.kB['sym_fnames_'+key] = [obj.dir+'kB_sym_'+key+'_'+str(i)+'.d' 
+                                     for i in range(obj.miter)]
+    
+    
+    obj.LC['dat_fname'] = obj.dir+'LC_data'+model_pars+sim_pars+'.txt'
+        
+    obj.LC['t_fname'] = obj.dir+'LC_t'+model_pars+sim_pars+'.txt'
+    obj.A_fname = obj.dir+'A.d'
+    
+    
+    obj.cA['sym_fname'] = obj.dir+'cA'+'.d'
+    obj.cB['sym_fname'] = obj.dir+'cB'+'.d'
+    
+    obj.pA['sym_fnames'] = [obj.dir+'pA_sym_'+str(i)+'.d'
+                            for i in range(obj.miter)]    
+    
+    obj.pA['dat_fnames'] = [(obj.dir+'pA_dat_'+str(i)+model_pars
+                            +c_pars
+                            +'_NA='+str(obj.NA[i])
+                            +'_NB='+str(obj.NB[i])
+                            +'_Ns='+str(obj.Ns[i])
+                            +'_smax='+str(obj.smax[i])
+                            +'_piter='+str(obj.p_iter[i])
+                            +'.txt')
+                            for i in range(obj.miter)]
+
+    obj.hodd['sym_fnames'] = [(obj.dir+'h_sym'+str(i)+'.d')
+                              for i in range(obj.miter)]
+    
+    obj.hodd['dat_fnames'] = [(obj.dir+'h_dat_'+str(i)
+                               +model_pars
+                               +c_pars
+                               +'_NA='+str(obj.hNA)
+                               +'_NB='+str(obj.hNB)
+                               +'_Ns='+str(obj.Ns[i])
+                               +'_smax='+str(obj.smax[i])
+                               +'_piter='+str(obj.p_iter[i])
+                               +'.txt')
+                              for i in range(obj.miter)]
+    
 
 def plot(obj,option='g1'):
     
@@ -385,60 +730,48 @@ def plot(obj,option='g1'):
     if (option[0] == 'g') and (option[1:].isnumeric()):
         k = int(option[1:])
         
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.plot(obj.tLC,obj.g_data[k][:,0],label='gx ode')
-        ax.plot(obj.tLC,obj.g_data[k][:,1],label='gy ode')
-        ax.set_title(option)
+        fig, axs = plt.subplots(nrows=obj.dim,ncols=1,figsize=(4,4))
         
-        if k == 1:
-            true_gx = obj.q_val*np.sin(obj.q_val*obj.tLC) + np.cos(obj.q_val*obj.tLC)
-            true_gy = np.sin(obj.q_val*obj.tLC) - obj.q_val*np.cos(obj.q_val*obj.tLC)
+        for i,ax in enumerate(axs):
+            key = obj.var_names[i]
+            ax.plot(obj.tLC,obj.g['dat'][k][:,i],label=key)
+            ax.legend()
             
-            ax.plot(obj.tLC,true_gx,label='gx true')
-            ax.plot(obj.tLC,true_gy,label='gy true')
-            
-            #ax.plot(obj.tLC,obj.z_data[k][:,1],'zy true')
-        ax.legend()
-        print('g init',k,obj.g_data[k][0,:])
+        axs[0].set_title('g'+str(k))
+        plt.tight_layout()
+        #ax.plot(obj.tLC,obj.z_data[k][:,1],'zy true')
+        #ax.legend()
         
     if (option[0] == 'z') and (option[1:].isnumeric()):
         k = int(option[1:])
         
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.plot(obj.tLC,obj.z_data[k][:,0],label='zx ode')
-        ax.plot(obj.tLC,obj.z_data[k][:,1],label='zy ode')
-        ax.set_title(option)
+        fig, axs = plt.subplots(nrows=obj.dim,ncols=1,figsize=(4,4))
         
-        if k == 0:
-            zx_true = np.cos(obj.q_val*obj.tLC)-np.sin(obj.q_val*obj.tLC)/obj.q_val
-            zy_true = np.sin(obj.q_val*obj.tLC)+np.cos(obj.q_val*obj.tLC)/obj.q_val
-            ax.plot(obj.tLC,zx_true,label='zx true')
-            ax.plot(obj.tLC,zy_true,label='zy true')
-            #ax.plot(obj.tLC,obj.z_data[k][:,1],'zy true')
-        ax.legend()
+        for i,ax in enumerate(axs):
+            key = obj.var_names[i]
+            ax.plot(obj.tLC,obj.z['dat'][k][:,i],label=key)
+            ax.legend()
         
-        print('z init',k,obj.z_data[k][0,:])
+        axs[0].set_title('z'+str(k))
+        #ax.set_title(option)
+        plt.tight_layout()
+        
+        #print('z init',k,obj.z['dat_'][k][0,:])
 
     # check if option of the form 'g'+'int'
     if (option[0] == 'i') and (option[1:].isnumeric()):
         k = int(option[1:])
         
+        fig, axs = plt.subplots(nrows=obj.dim,ncols=1,figsize=(4,4))
         
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.plot(obj.tLC,obj.i_data[k][:,0],label='ix ode')
-        ax.plot(obj.tLC,obj.i_data[k][:,1],label='iy ode')
-        ax.set_title(option)
+        for i,ax in enumerate(axs):
+            key = obj.var_names[i]
+            ax.plot(obj.tLC,obj.i['dat'][k][:,i],label=key)
+            ax.legend()
         
-        if k == 0:
-            ax.plot(obj.tLC,np.cos(obj.q_val*obj.tLC),label='ix true')
-            ax.plot(obj.tLC,np.sin(obj.q_val*obj.tLC),label='iy true')
-            #ax.plot(obj.tLC,obj.z_data[k][:,1],'zy true')
-            
-        ax.legend()
-        print('i init',k,obj.i_data[k][0,:])
+        axs[0].set_title('i'+str(k))
+        #ax.set_title(option)
+        plt.tight_layout()
     
     if (option[:2] == 'pA') and (option[2:].isnumeric()):
         k = int(option[2:])
@@ -452,7 +785,7 @@ def plot(obj,option='g1'):
             #                cmap='viridis')
             
             ax.plot_surface(obj.A_mg,obj.B_mg,
-                            obj.pA_data[k],
+                            obj.pA['dat'][k],
                             cmap='viridis')
             
             ax.set_title(option)
@@ -540,10 +873,24 @@ def plot(obj,option='g1'):
         
     if (option[:4] == 'hodd') and (option[4:].isnumeric()):
         k = int(option[4:])
+        
+        #A_array,dxA = np.linspace(0,self.T,self.NA[k],retstep=True)
+        B_array,dxB = np.linspace(0,obj.T,obj.NB[k],retstep=True)
+        
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        ax.plot(obj.B_array,obj.h_odd_data[k])
+        ax.plot(B_array,obj.hodd['dat'][k])
         ax.set_xlabel('theta')
         ax.set_ylabel('H')
-        ax.set_title('All H of order '+str(k))
+        NA = obj.NA
+        NB = obj.NB
+        Ns = obj.Ns
+        #print(obj.Ns)
+        #p_iter = obj.p_iter
+        title = ('All H of order '+str(k)
+                 +', NA='+str(NA[k])
+                 +', NB='+str(NB[k])
+                 +', Ns='+str(Ns[k]))
+                 #+', piter='+str(p_iter[k]))
+        ax.set_title(title)
         plt.tight_layout()

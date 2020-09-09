@@ -23,6 +23,8 @@ TODO:
 # user-defined
 import MatchingLib as lib
 from interp_basic import interp_basic as interpb
+from interp2d_basic import interp2d_basic as interp2db
+import SymLib as slib
 
 import inspect
 import time
@@ -32,6 +34,7 @@ import math
 import dill
 import copy
 import matplotlib
+import tqdm
 
 import scipy.interpolate as si
 import numpy as np
@@ -48,9 +51,11 @@ from sympy import Matrix, symbols,diff, pi, Sum, Indexed, collect, expand
 from sympy import sympify as s
 from sympy.physics.quantum import TensorProduct as kp
 from sympy.utilities.lambdify import lambdify, implemented_function
-#from sympy.interactive import init_printing
+from pathos.pools import _ProcessPool
 
-from interpolate import interp1d
+imp_fn = implemented_function
+
+#from interpolate import interp1d
 #from scipy.interpolate import interp1d, interp2d
 from scipy.interpolate import interp2d
 from scipy.integrate import solve_ivp, quad
@@ -97,63 +102,90 @@ class CGL(object):
         
         for (prop, default) in defaults.items():
             setattr(self, prop, kwargs.get(prop, default))
-
+            
+        self.var_names = ['x','y']
+        self.dim = len(self.var_names)
+        
         # misc variables
         self.miter = self.trunc_order+1
 
         # Symbolic variables and functions
-        self.eye = np.identity(2)
+        self.eye = np.identity(self.dim)
         self.psi, self.eps, self.kap_sym = sym.symbols('psi eps kap_sym')
         
         self.rtol = 1e-6
         self.atol = 1e-8
-        self.method = 'RK45'
+        self.method = 'LSODA'
         self.rel_tol = 1e-6
         
-        #self.x1,self.x2,self.x3,self.t = symbols('x1 x2,x3, t')
-        #self.x,self.y,self.z,self.t = symbols('x1 x2,x3, t')
-        #self.f_list, self.x_vars, self.y_vars, self.z_vars = ([] for i in range(4))
+        # for coupling computation. ctrl+F to see usage.
+        self.NA = np.array([70,70,70,70,70,70])
+        self.NB = self.NA + 1
+        self.Ns = np.array([50,50,50,50,50,50])
+        self.smax = np.array([1,1,1,1,1,1])
+        self.p_iter = np.array([5,5,5,5,5,5])
         
         # parameters
         self.q, self.d = symbols('q d')
         
+        self.rule_par = {self.q:self.q_val,self.d:self.d_val}
+        
         # single-oscillator variables
         self.x, self.y, self.t, self.s = symbols('x y t s')
-        self.tA, self.tB, = symbols('tA tB')
         self.dx, self.dy = symbols('dx dy')
         
         # coupling variables
+        self.tA, self.tB, = symbols('tA tB')
         self.thA, self.psiA, self.thB, self.psiB = symbols('thA psiA thB psiB')
         
         self.xA, self.yA, self.xB, self.yB = symbols('xA yA xB yB')
         self.dxA, self.dyA, self.dxB, self.dyB = symbols('dxA dyA dxB dyB')
         
+        self.vars = [self.x,self.y]
+        self.A_vars = [self.xA,self.yA]
+        self.dA_vars = [self.dxA,self.dyA]
+        
+        self.B_vars = [self.xB,self.yB]
+        self.dB_vars = [self.dxB,self.dyB]
+        
+        self.A_pair = sym.zeros(1,2*self.dim)
+        self.A_pair[0,:self.dim] = [self.A_vars]
+        self.A_pair[0,self.dim:] = [self.B_vars]
+        
+        self.dA_pair = sym.zeros(1,2*self.dim)
+        self.dA_pair[0,:self.dim] = [self.dA_vars]
+        self.dA_pair[0,self.dim:] = [self.dB_vars]
+        
+        self.B_pair = sym.zeros(1,2*self.dim)
+        self.B_pair[0,:self.dim] = [self.B_vars]
+        self.B_pair[0,self.dim:] = [self.A_vars]
+        
+        self.dB_pair = sym.zeros(1,2*self.dim)
+        self.dB_pair[0,:self.dim] = [self.dB_vars]
+        self.dB_pair[0,self.dim:] = [self.dA_vars]
+        
+        
         self.dx_vec = Matrix([[self.dx,self.dy]])
         self.x_vec = Matrix([[self.x],[self.y]])
         
-        # find limit cycle or load
-        self.T = 2*np.pi/self.q_val
+        # function dicts
+        # individual functions
+        self.LC = {}
+        self.g = {}
+        self.z = {}
+        self.i = {}
         
-        #self.TN = TN
-        # find limit cycle -- easy for this problem but think of general methods
-        # see Dan's code for general method
-        self.tLC = np.linspace(0,self.T,self.TN)
+        # for coupling
+        self.cA = {}
+        self.cB = {}
         
-        # make interpolated version of LC
-        #LC_interp_x = interp1d(tLC,LC_arr[:,0])
-        #LC_interp_y = interp1d(tLC,LC_arr[:,1])
+        self.kA = {}
+        self.kB = {}
         
-        self.LC_x = sym.cos(self.q_val*self.t)
-        self.LC_y = sym.sin(self.q_val*self.t)
-        
-        self.LC_x_sym = sym.cos(self.q*self.t)
-        self.LC_y_sym = sym.sin(self.q*self.t)
-        
-        self.rule_LC = {self.x:self.LC_x,self.y:self.LC_y}
-        self.rule_par = {self.q:self.q_val,self.d:self.d_val}
-        
-        
-        
+        self.pA = {}
+        self.pB = {}
+        self.hodd = {}
+        self.het2 = {}
         
         # filenames and directories
         self.dir = 'cgl_dat/'
@@ -161,35 +193,42 @@ class CGL(object):
         if (not os.path.exists(self.dir)):
             os.makedirs(self.dir)
         
-        self.generate_fnames()
-        self.CGL_sym = self.CGL_rhs(0,[self.x,self.y],option='sym')
-        self.CGL_val = self.CGL_rhs(0,[self.x,self.y],option='value')
-        #print(self.CGL_sym)
+        lib.generate_fnames(self)
         
-        #sol_unpert = odeint(f,init,tLC,args=(hetx_lam,hety_lam,k))
+        self.rhs_sym = self.rhs(0,self.vars,option='sym')
         
-        # symbol J on LC.
-        self.jacLC_sym = Matrix([[diff(self.CGL_sym[0],self.x),
-                                  diff(self.CGL_sym[0],self.y)],
-                                 [diff(self.CGL_sym[1],self.x),
-                                  diff(self.CGL_sym[1],self.y)]])
+        # find limit cycle or load
+        self.T = 2*np.pi/self.q_val
+        self.omega = 2*np.pi/self.T
         
-        self.jacLC_sym = sym.trigsimp(self.jacLC_sym.subs({self.x:self.LC_x,self.y:self.LC_y}))
+        #self.TN = TN
+        # find limit cycle -- easy for this problem but think of general methods
+        # see Dan's code for general method
+        self.tLC = np.linspace(0,self.T,self.TN)
+        self.LC['t'] = self.tLC
         
-        #print(-(self.jacLC_sym.T+self.kap_sym*(0-1)*self.eye))
+        # make interpolated version of LC
+        #LC_interp_x = interp1d(tLC,LC_arr[:,0])
+        #LC_interp_y = interp1d(tLC,LC_arr[:,1])
         
+        self.LC['imp_x'] = sym.cos(self.q*self.t).subs(self.rule_par)
+        self.LC['lam_x'] = lambdify(self.t,
+                                    self.LC['imp_x'].subs(self.rule_par))
         
+        self.LC['imp_y'] = sym.sin(self.q*self.t).subs(self.rule_par)
+        self.LC['lam_y'] = lambdify(self.t,
+                                    self.LC['imp_y'].subs(self.rule_par))
         
-        # make RHS and Jacobian callable functions
-        self.f = lambdify((self.x,self.y),self.CGL_val)
+        print(self.LC['lam_y'](0.5))
         
-        #jac = sym.lambdify((x1,x2),Jac)
-        self.jacLC = lambdify((self.t),self.jacLC_sym.subs({'q':self.q_val}))
+        self.rule_LC = {}
+        for i,key in enumerate(self.var_names):
+            self.rule_LC.update({self.vars[i]:self.LC['imp_'+key]})
+    
         
-        # assume gx is the first coordinate of Floquet eigenfunction g
-        # brackets denote Taylor expansion functions
-        # now substitute Taylor expansion dx = gx[0] + gx[1] + gx[2] + ...
-        self.generate_reduced_expansions()
+        slib.generate_expansions(self)
+        slib.generate_coupling_expansions(self)
+        slib.load_jac_sym(self)
         
         # Run method
         # get monodromy matrix
@@ -225,7 +264,7 @@ class CGL(object):
             self.x_pairB = Matrix([[self.xB, self.yB, self.xA, self.yA]])
             self.dx_pairB = Matrix([[self.dxB, self.dyB, self.dxA, self.dyA]])
             
-            self.generate_coupling_expansions()
+            #self.generate_coupling_expansions()
             self.load_k_sym()
             
             self.load_p_sym()
@@ -234,7 +273,7 @@ class CGL(object):
             self.load_h_sym()
             self.load_h()
         
-    def CGL_rhs(self,t,z,option='value'):
+    def rhs(self,t,z,option='value'):
         """
         right-hand side of the equation of interest. CCGL model.
         
@@ -252,181 +291,34 @@ class CGL(object):
         R2 = x**2 + y**2
         
         if option == 'value':
-            return np.array([x*(1-R2)-self.q_val*R2*y,y*(1-R2)+self.q_val*R2*x])
+            return np.array([x*(1-R2)-self.q_val*R2*y,
+                             y*(1-R2)+self.q_val*R2*x])
         elif option == 'sym':
-            return Matrix([x*(1-R2)-self.q*R2*y,y*(1-R2)+self.q*R2*x])
+            return Matrix([x*(1-R2)-self.q*R2*y,
+                           y*(1-R2)+self.q*R2*x])
     
     
-    def CGL_coupling(self,x1,y1,x2,y2,option='value'):
+    def coupling(self,vars_pair,option='value'):
         """
         r^(2n) to r^n function. default parameter order is from perspective of
         first oscillator.
         
         in this case the input is (x1,y1,x2,y2) and the output is an r2 vec.
         """
+        x1,y1,x2,y2 = vars_pair
         
         if option == 'value':
             return np.array([x2-x1-self.d_val*(y2-y1),y2-y1+self.d_val*(x2-x1)])
         elif option == 'sym':
             return Matrix([x2-x1-self.d*(y2-y1),y2-y1+self.d*(x2-x1)])
     
-    
-    def generate_fnames(self):
-        
-        self.model_params = '_q=' + str(self.q_val)
-        
-        self.c_params = '_d=' + str(self.d_val)
-        
-        self.sim_params = '_TN='+str(self.TN)
-        
-        self.monodromy_fname = self.dir+'monodromy_'+self.model_params+self.sim_params+'.txt'
-
-        self.ghx_fnames = [self.dir+'ghx_'+str(i)+self.model_params+'.d' 
-                           for i in range(self.miter)]
-        self.ghy_fnames = [self.dir+'ghy_'+str(i)+self.model_params+'.d' 
-                           for i in range(self.miter)]
-        self.g_fnames = [self.dir+'g_'+str(i)+self.model_params+self.sim_params+'.txt' 
-                         for i in range(self.miter)]
-        
-        self.hetx_fnames = [self.dir+'hetx_'+str(i)+self.model_params+'.d' 
-                            for i in range(self.miter)]
-        self.hety_fnames = [self.dir+'hety_'+str(i)+self.model_params+'.d' 
-                            for i in range(self.miter)]
-        self.A_fname = self.dir+'A_'+self.model_params+'.d'
-        
-        self.z_fnames = [self.dir+'z_'+str(i)+self.model_params+self.sim_params+'.txt' 
-                         for i in range(self.miter)]
-        self.i_fnames = [self.dir+'i_'+str(i)+self.model_params+self.sim_params+'.txt' 
-                         for i in range(self.miter)]
-        
-        self.kxA_fnames = [(self.dir+'kxa_'+str(i)+'.txt')
-                           for i in range(self.miter)]
-        self.kyA_fnames = [(self.dir+'kya_'+str(i)+'.txt')
-                           for i in range(self.miter)]
-        self.kxB_fnames = [(self.dir+'kxb_'+str(i)+'.txt')
-                           for i in range(self.miter)]
-        self.kyB_fnames = [(self.dir+'kyb_'+str(i)+'.txt')
-                           for i in range(self.miter)]
-        
-        self.cA_fname = self.dir+'cA'+'.d'
-        self.cB_fname = self.dir+'cB'+'.d'
-        
-        self.p_rhsA_fnames = [(self.dir+'p_rhsA_'+str(i)+'.d')
-                              for i in range(self.miter)]
-        self.p_rhsB_fnames = [(self.dir+'p_rhsB_'+str(i)+'.d')
-                              for i in range(self.miter)]
-        self.ph_symA_fnames = [(self.dir+'ph_symA_'+str(i)+'.d')
-                               for i in range(self.miter)]
-        self.ph_symB_fnames = [(self.dir+'ph_symB_'+str(i)+'.d')
-                               for i in range(self.miter)]
-        
-        
-        self.pA_fnames = [self.dir+('pA_'+str(i)+self.model_params
-                                    + self.c_params+'.txt')
-                          for i in range(self.miter)]
-        self.pB_fnames = [self.dir+('pB_'+str(i)+self.model_params+'.txt'
-                                    + self.c_params+'.txt')
-                          for i in range(self.miter)]
-        
-        self.h_sym_fnames = [(self.dir+'h_sym'+str(i)+'.d')
-                             for i in range(self.miter)]
-        
-        self.h_odd_fnames = [self.dir+('h_odd_'+str(i)+self.model_params+'.txt'
-                                       + self.c_params+'.txt')
-                             for i in range(self.miter)]
-    
-    def generate_reduced_expansions(self):
-        """
-        generate expansions from Wilson 2020
-        """
-        i_sym = sym.symbols('i_sym')  # summation index
-        psi = self.psi
-        
-        self.gx = Sum(psi**i_sym*Indexed('gx',i_sym),(i_sym,0,self.miter)).doit()
-        self.gy = Sum(psi**i_sym*Indexed('gy',i_sym),(i_sym,0,self.miter)).doit()
-        
-        self.zx = Sum(psi**i_sym*Indexed('zx',i_sym),(i_sym,0,self.miter)).doit()
-        self.zy = Sum(psi**i_sym*Indexed('zy',i_sym),(i_sym,0,self.miter)).doit()
-        
-        self.ix = Sum(psi**i_sym*Indexed('ix',i_sym),(i_sym,0,self.miter)).doit()
-        self.iy = Sum(psi**i_sym*Indexed('iy',i_sym),(i_sym,0,self.miter)).doit()
-        
-        self.z_expansion = Matrix([[self.zx],[self.zy]])
-    
-    
-    def load_coupling_expansions(self):
-        # finish this function for speedup at initialization.
-        pass
-        
-    def generate_coupling_expansions(self):
-        """
-        generate expansions for coupling.
-        """
-        
-        i_sym = sym.symbols('i_sym')  # summation index
-        psi = self.psi
-        eps = self.eps
-        
-        self.pA = Sum(eps**i_sym*Indexed('pA',i_sym),(i_sym,1,self.miter)).doit()
-        self.pB = Sum(eps**i_sym*Indexed('pB',i_sym),(i_sym,1,self.miter)).doit()
-        
-        gxA = Sum(psi**i_sym*Indexed('gxA',i_sym),(i_sym,1,self.miter)).doit()
-        gyA = Sum(psi**i_sym*Indexed('gyA',i_sym),(i_sym,1,self.miter)).doit()
-        ixA = Sum(psi**i_sym*Indexed('ixA',i_sym),(i_sym,0,self.miter)).doit()
-        iyA = Sum(psi**i_sym*Indexed('iyA',i_sym),(i_sym,0,self.miter)).doit()
-        
-        gxB = Sum(psi**i_sym*Indexed('gxB',i_sym),(i_sym,1,self.miter)).doit()
-        gyB = Sum(psi**i_sym*Indexed('gyB',i_sym),(i_sym,1,self.miter)).doit()
-        ixB = Sum(psi**i_sym*Indexed('ixB',i_sym),(i_sym,0,self.miter)).doit()
-        iyB = Sum(psi**i_sym*Indexed('iyB',i_sym),(i_sym,0,self.miter)).doit()
-        
-        ruleA = {'psi':self.pA}
-        ruleB = {'psi':self.pB}
-        
-        gx_collectedA = collect(expand(gxA.subs(ruleA)),eps)
-        gy_collectedA = collect(expand(gyA.subs(ruleA)),eps)
-        ix_collectedA = collect(expand(ixA.subs(ruleA)),eps)
-        iy_collectedA = collect(expand(iyA.subs(ruleA)),eps)
-        
-        gx_collectedB = collect(expand(gxB.subs(ruleB)),eps)
-        gy_collectedB = collect(expand(gyB.subs(ruleB)),eps)
-        ix_collectedB = collect(expand(ixB.subs(ruleB)),eps)
-        iy_collectedB = collect(expand(iyB.subs(ruleB)),eps)
-        
-        # truncate and collect up to order self.trunc_order
-        self.gx_epsA = 0
-        self.gy_epsA = 0
-        self.ix_epsA = 0
-        self.iy_epsA = 0
-        
-        self.gx_epsB = 0
-        self.gy_epsB = 0
-        self.ix_epsB = 0
-        self.iy_epsB = 0
-        
-        for i in range(self.miter):
-            self.gx_epsA += eps**i*gx_collectedA.coeff(eps,i)
-            self.gy_epsA += eps**i*gy_collectedA.coeff(eps,i)
-            self.ix_epsA += eps**i*ix_collectedA.coeff(eps,i)
-            self.iy_epsA += eps**i*iy_collectedA.coeff(eps,i)
-            
-            self.gx_epsB += eps**i*gx_collectedB.coeff(eps,i)
-            self.gy_epsB += eps**i*gy_collectedB.coeff(eps,i)
-            self.ix_epsB += eps**i*ix_collectedB.coeff(eps,i)
-            self.iy_epsB += eps**i*iy_collectedB.coeff(eps,i)
-    
-        self.iA = Matrix([[self.ix_epsA],[self.iy_epsA]])
-        self.iB = Matrix([[self.ix_epsB],[self.iy_epsB]])
-    
-    
-    
-
     def load_monodromy(self):
         """
         if monodromy data exists, load. if DNE or recompute required, compute here.
         """
-        if self.recompute_monodromy or not(lib.files_exist([self.monodromy_fname])):
-            init = np.reshape(self.eye,4)
+        if self.recompute_monodromy\
+            or not(lib.files_exist([self.monodromy_fname])):
+            init = np.reshape(self.eye,self.dim**2)
             
             sol = solve_ivp(lib.monodromy,[0,self.tLC[-1]],init,
                             args=(self.jacLC,),
@@ -434,11 +326,13 @@ class CGL(object):
                             rtol=self.rtol,atol=self.atol)
             
             self.sol = sol.sol(self.tLC).T
-            self.M = np.reshape(self.sol[-1,:],(2,2))
+            self.M = np.reshape(self.sol[-1,:],(self.dim,self.dim))
             np.savetxt(self.monodromy_fname,self.M)
 
         else:
             self.M = np.loadtxt(self.monodromy_fname)
+        
+        
         
         #print('Monodromy Matrix',self.M)
         self.eigenvalues, self.eigenvectors = np.linalg.eig(self.M)
@@ -461,38 +355,47 @@ class CGL(object):
         
         #print('Floquet Multiplier',self.lam)
         print('Floquet Exponent kapa =',self.kappa)
-        #print('Eigenvectors of M',self.eigenvectors[:,0],self.eigenvectors[:,1])
-        
         
     def load_g_sym(self):
         # load het. functions h if they exist. otherwise generate.
-        self.rule_g0 = {sym.Indexed('gx',0):s(0),sym.Indexed('gy',0):s(0)}
-        self.ghx_sym, self.ghy_sym = ([] for i in range(2))
+        self.rule_g0 = {sym.Indexed('g'+name,0):
+                        s(0) for name in self.var_names}
         
-        if self.recompute_g_sym \
-                or not(lib.files_exist(self.ghx_fnames,self.ghy_fnames)):
+        #self.rule_g0 = {sym.Indexed('gx',0):s(0),sym.Indexed('gy',0):s(0)}
+        for key in self.var_names:
+            self.g['sym_'+key] = []
+        
+        # check that files exist
+        val = 0
+        for key in self.var_names:
+            val += not(lib.files_exist(self.g['sym_fnames_'+key]))
+        
+        if val != 0:
+            files_do_not_exist = True
+        else:
+            files_do_not_exist = False
+        
+        if self.recompute_g_sym or files_do_not_exist:
+            #print(self.recompute_g_sym,files_do_not_exist)
             print('* Computing... g sym')
-            self.generate_g_sym()  # create symbolic derivative
             
+            # create symbolic derivative
+            sym_collected = slib.generate_g_sym(self)  
             
             for i in range(self.miter):
-                
-                # save each order to list and dill.
-                expr_x = self.ghx_sym_collected[self.psi**i].subs(self.rule_g0)
-                expr_y = self.ghy_sym_collected[self.psi**i].subs(self.rule_g0)
-                
-                self.ghx_sym.append(expr_x)
-                self.ghy_sym.append(expr_y)
-                
-                
-                dill.dump(self.ghx_sym[i],open(self.ghx_fnames[i],'wb'),
-                          recurse=True)
-                dill.dump(self.ghy_sym[i],open(self.ghy_fnames[i],'wb'),
-                          recurse=True)
+                for key in self.var_names:
+                    expr = sym_collected[key].coeff(self.psi,i)
+        
+        
+                    self.g['sym_'+key].append(expr)
+                    #print(self.g_sym_fnames[key][i])
+                    dill.dump(self.g['sym_'+key][i],
+                              open(self.g['sym_fnames_'+key][i],'wb'),
+                              recurse=True)
                 
         else:
-            self.ghx_sym = lib.load_dill(self.ghx_fnames)
-            self.ghy_sym = lib.load_dill(self.ghy_fnames)
+            for key in self.var_names:
+                self.g['sym_'+key] = lib.load_dill(self.g['sym_fnames_'+key])
             
     def generate_g_sym(self):
         """
@@ -536,135 +439,137 @@ class CGL(object):
         
         # load all g or recompute or compute new.
         
-        self.g_data, self.gx_imp, self.gy_imp = ([] for i in range(3))
-        self.gx_callable, self.gy_callable = ([] for i in range(2))
-
-        if self.recompute_g or not(lib.files_exist(self.g_fnames)):  # generate
-            
-            print('* Computing...',end=' ')
-            
-            for i in range(self.miter):
-                print('g_'+str(i),end=', ')
-                data = self.generate_g(i)
-                self.g_data.append(data)
-                np.savetxt(self.g_fnames[i],data)
-            print()
-            
-        else:   # load
-            
-            self.g_data,self.gx_imp,self.gy_imp = self.load_sols(self.g_fnames,symName='g')
-            
-        rulex = {sym.Indexed('gx',i):self.gx_imp[i](self.t) for i in range(len(self.g_fnames))}
-        ruley = {sym.Indexed('gy',i):self.gy_imp[i](self.t) for i in range(len(self.g_fnames))}
-        self.rule_g = {**rulex,**ruley}
+        self.g['dat'] = []
         
+        for key in self.var_names:
+            self.g['imp_'+key] = []
+            self.g['lam_'+key] = []
         
-        for i in range(len(self.g_data)):
-            self.gx_callable.append(lambdify(self.t,self.gx_imp[i](self.t)))
-            self.gy_callable.append(lambdify(self.t,self.gy_imp[i](self.t)))
-        
-        # coupling
+        print('* Computing...', end=' ')
+        for i in range(self.miter):
+            print('g_'+str(i),end=', ')
+            fname = self.g['dat_fnames'][i]
+            #print('i,fname',i,fname)
+            file_does_not_exist = not(os.path.exists(fname))
+            if self.recompute_g or file_does_not_exist:
+                
+                het_vec = self.interp_lam(i,self.g,fn_type='g')
+                
+                data = self.generate_g(i,het_vec)
+                np.savetxt(self.g['dat_fnames'][i],data)
+                
+            else:
+                data = np.loadtxt(fname)
+                
+            if False:
+                fig, axs = plt.subplots(nrows=self.dim,ncols=1)
+                
+                for j,ax in enumerate(axs):
+                    key = self.var_names[j]
+                    ax.plot(self.tLC,data[:,j],label=key)
+                    ax.legend()
+                    
+                axs[0].set_title('g'+str(i))
+                print('g'+str(i)+' init',data[0,:])
+                print('g'+str(i)+' final',data[-1,:])
+                
+                plt.tight_layout()
+                plt.show(block=True)
+                time.sleep(.1)
+                
+                
+            self.g['dat'].append(data)
+            
+            for j,key in enumerate(self.var_names):
+                #print(len(self.tLC),len(data[:,j]))
+                fn_temp = interpb(self.tLC,data[:,j],self.T)
+                imp_temp = imp_fn('g'+key+'_'+str(i),self.fmod(fn_temp))
+                self.g['imp_'+key].append(imp_temp)
+                
+                lam_temp = lambdify(self.t,self.g['imp_'+key][i](self.t))
+                self.g['lam_'+key].append(lam_temp)
+                
+            
+        # replacement rules.
         thA = self.thA
         thB = self.thB
         
-        rule_gxA = {Indexed('gxA',i):self.gx_imp[i](thA) for i in range(self.miter)}
-        rule_gyA = {Indexed('gyA',i):self.gy_imp[i](thA) for i in range(self.miter)}
-        
-        rule_gxB = {Indexed('gxB',i):self.gx_imp[i](thB) for i in range(self.miter)}
-        rule_gyB = {Indexed('gyB',i):self.gy_imp[i](thB) for i in range(self.miter)}
-        
-        self.rule_g_AB = {**rule_gxA,**rule_gyA,**rule_gxB,**rule_gyB}
-        
+        self.rule_g = {}  # g function
+        self.rule_g_AB = {}  # coupling
+        for key in self.var_names:
+            for i in range(self.miter):
+                dictg = {sym.Indexed('g'+key,i):self.g['imp_'+key][i](self.t)}
+                dictA = {Indexed('g'+key+'A',i):self.g['imp_'+key][i](thA)}
+                dictB = {Indexed('g'+key+'B',i):self.g['imp_'+key][i](thB)}
+                
+                self.rule_g.update(dictg)
+                self.rule_g_AB.update(dictA)
+                self.rule_g_AB.update(dictB)
+                
+        print()
         
     
-    def generate_g(self,k):
+    def generate_g(self,k,het_vec):
+        """
+        generate Floquet eigenfunctions g
+        
+        uses Newtons method
+        """
         # load kth expansion of g for k >= 0
         
         if k == 0:
-            # g0 is 0
-            
-            self.gx_imp.append(implemented_function('gx_0', lambda t: 0))
-            self.gy_imp.append(implemented_function('gy_0', lambda t: 0))
-            
-            return np.zeros((self.TN,2))
+            # g0 is 0. dot his to keep indexing simple.
+            return np.zeros((self.TN,len(self.var_names)))
         
-        rulex = {sym.Indexed('gx',i):self.gx_imp[i](self.t) for i in range(k)}
-        ruley = {sym.Indexed('gy',i):self.gy_imp[i](self.t) for i in range(k)}
-        
-        rule = {**rulex,**ruley,**self.rule_LC,**self.rule_par}
-        
-        # lambdify heterogeneous terms for use in integration
-        hetx_lam = lambdify(self.t,self.ghx_sym[k].subs(rule))
-        hety_lam = lambdify(self.t,self.ghy_sym[k].subs(rule))
-        
+
         if k == 1:
             # pick correct normalization
+            #init = [0,self.g1_init[1],self.g1_init[2],self.g1_init[3]]
             init = copy.deepcopy(self.g1_init)
         else:
+            init = np.zeros(self.dim)
+            
             # find intial condtion
-            init = lib.run_newton(self,self.dg,[0,0],hetx_lam,hety_lam,k,
-                                  max_iter=200,
-                                  rel_tol=self.rel_tol,rel_err=10,eps=1e-2,
-                                  backwards=True)
-                
+        
+        if k == 1:
+            eps = 1e-2
+            backwards = True
+            rel_tol = 1e-7
+            alpha = 1
+        else:
+            eps = 1e-2
+            backwards = True
+            rel_tol = 1e-9
+            alpha = 1
+            
+            init = lib.run_newton2(self,self.dg,init,k,het_vec,
+                                  max_iter=100,eps=eps,
+                                  rel_tol=rel_tol,rel_err=10,
+                                  exception=False,alpha=alpha,
+                                  backwards=backwards)
         
         # get full solution
-        sol = solve_ivp(self.dg,[0,-self.tLC[-1]],
-                        init,args=(hetx_lam,hety_lam,k),
-                        t_eval=-self.tLC,
-                        method=self.method,dense_output=True,
+        
+        if backwards:
+            tLC = -self.tLC
+            
+        else:
+            tLC = self.tLC
+            
+        sol = solve_ivp(self.dg,[0,tLC[-1]],
+                        init,args=(k,het_vec),
+                        t_eval=tLC,method=self.method,
+                        dense_output=True,
                         rtol=self.rtol,atol=self.atol)
         
-        # data from backwards integration is in wrong order unless paired  with sol.t
-        # flip to call backwards?
-        gu = sol.y.T[::-1,:]
-        
-        if False:
-            #print('dx',dx)
-            #print(obj.tLC)
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.plot(sol.t,gu)
-            #ax.plot(gu[::-1,:])
-            ax.set_title('g'+str(k))
-            plt.show(block=True)
-            #time.sleep(2)
-            plt.close()
-        
-        #init = np.reshape(self.eye,4)
+        if backwards:
+            gu = sol.y.T[::-1,:]
             
-        #sol = solve_ivp(lib.monodromy,[0,self.tLC[-1]],init,
-        #                args=(self.jacLC,),
-        #                method=self.method,dense_output=True)
+        else:
+            gu = sol.y.T
         
-        #self.sol = sol.sol(self.tLC).T
-        
-        # if True and k == 1:
-        #     print(self.g1_init)
-        #     print(self.dg(.7,self.g1_init,hetx_lam,hety_lam,k))
             
-        #     fig = plt.figure(figsize=(6,6))
-        #     ax = fig.add_subplot(111)
-            
-        #     ax.plot(self.tLC,gu)
-            
-        #     plt.show(block=True)
-        #     #print(init,k)
-
-        # save soluton as lambda functions
-        
-        #fnx = interp1d(self.tLC,gu[:,0],fill_value='extrapolate',assume_sorted=True)
-        #fny = interp1d(self.tLC,gu[:,1],fill_value='extrapolate',assume_sorted=True)
-        
-        fnx = interpb(self.tLC,gu[:,0])
-        fny = interpb(self.tLC,gu[:,1])
-        
-        # save as implemented fns for use in sympy objects
-        self.gx_imp.append(implemented_function('gx_'+str(k),self.myFunMod(fnx)))
-        self.gy_imp.append(implemented_function('gy_'+str(k),self.myFunMod(fny)))
-        
         return gu
-
         
     def load_sols(self,fnames,symName='g',varnum=1):
         """
@@ -695,11 +600,8 @@ class CGL(object):
             list1.append(data)
             
             if varnum == 1:
-                #fnx = interp1d(self.tLC,data[:,0],fill_value='extrapolate',assume_sorted=True)
-                #fny = interp1d(self.tLC,data[:,1],fill_value='extrapolate',assume_sorted=True)
-                
-                fnx = interpb(self.tLC,data[:,0])
-                fny = interpb(self.tLC,data[:,1])
+                fnx = interpb(self.tLC,data[:,0],self.T)
+                fny = interpb(self.tLC,data[:,1],self.T)
                 
                 xtemp = implemented_function(symName+'x_'+str(i), self.myFunMod(fnx))
                 ytemp = implemented_function(symName+'y_'+str(i), self.myFunMod(fny))
@@ -725,28 +627,47 @@ class CGL(object):
 
     
     def load_het_sym(self):
-        # load het. functions h if they exist. otherwise generate.
+        # load het. for z and i if they exist. otherwise generate.
         
-        if self.recompute_het_sym or \
-                not(lib.files_exist(self.hetx_fnames,self.hety_fnames,[self.A_fname])):
+        for key in self.var_names:
+            self.z['sym_'+key] = []
+            self.i['sym_'+key] = []
+        #    self.het1['sym_'+key] = []
+        #self.het1 = {'sym_'+k: [] for k in self.var_names}
+        
+        # check that files exist
+        val = 0
+        for key in self.var_names:
+            val += not(lib.files_exist(self.z['sym_fnames_'+key]))
+            val += not(lib.files_exist(self.i['sym_fnames_'+key]))
+        
+        val += not(lib.files_exist([self.A_fname]))
+        
+        if val != 0:
+            files_do_not_exist = True
+        else:
+            files_do_not_exist = False
+        
+        if self.recompute_het_sym or files_do_not_exist:
             
-            
-            self.hetx_sym, self.hety_sym = ([] for i in range(2))
-            self.generate_het_sym()
+            sym_collected = self.generate_het_sym()
             
             for i in range(self.miter):
-                
-                # save current term
-                expr_x = self.hetx_powers[self.psi**i].subs(self.rule_g0)
-                expr_y = self.hety_powers[self.psi**i].subs(self.rule_g0)
-                
-                self.hetx_sym.append(expr_x)
-                self.hety_sym.append(expr_y)
-                
-                dill.dump(self.hetx_sym[i],open(self.hetx_fnames[i],'wb'),
-                          recurse=True)
-                dill.dump(self.hety_sym[i],open(self.hety_fnames[i],'wb'),
-                          recurse=True)
+                for key in self.var_names:
+                    
+                    expr = sym_collected[key].coeff(self.psi,i)
+                    expr = expr.subs(self.rule_g0)
+                    self.z['sym_'+key].append(expr)
+                    self.i['sym_'+key].append(expr)
+                    #print('het1 key, i,expr', key, i,expr)
+                    #print()
+                    #print(self.g_sym_fnames[key][i])
+                    dill.dump(self.z['sym_'+key][i],
+                              open(self.z['sym_fnames_'+key][i],'wb'),
+                              recurse=True)
+                    dill.dump(self.i['sym_'+key][i],
+                              open(self.i['sym_fnames_'+key][i],'wb'),
+                              recurse=True)
                 
             # save matrix of a_i
             dill.dump(self.A,open(self.A_fname,'wb'),recurse=True)
@@ -754,9 +675,11 @@ class CGL(object):
 
         else:
             self.A, = lib.load_dill([self.A_fname])
-            self.hetx_sym = lib.load_dill(self.hetx_fnames)
-            self.hety_sym = lib.load_dill(self.hety_fnames)
-            
+            for key in self.var_names:
+                self.z['sym_'+key] = lib.load_dill(self.z['sym_fnames_'+key])
+                self.i['sym_'+key] = lib.load_dill(self.i['sym_fnames_'+key])
+        
+        #lam = lambdify(self.t,self.het1['sym_'+key][1].subs(rule))
             
     def generate_het_sym(self):
         """
@@ -771,234 +694,307 @@ class CGL(object):
         # get the general expression for h in z before plugging in g,z.
         
         # column vectors ax ay for use in matrix A = [ax ay]
-        self.ax = Matrix([[0],[0]])
-        self.ay = Matrix([[0],[0]])
+        self.a = {k: sym.zeros(self.dim,1) for k in self.var_names}
         
-        for j in range(1,self.trunc_derivative+1):
-            p1 = lib.kProd(j,self.dx_vec)
-            p2 = kp(p1,sym.eye(2))
+        #self.ax = Matrix([[0],[0]])
+        #self.ay = Matrix([[0],[0]])
         
-            d1 = lib.vec(lib.df(self.CGL_sym[0],self.x_vec,j+1))
-            d2 = lib.vec(lib.df(self.CGL_sym[1],self.x_vec,j+1))
-            
-            self.ax += (1/math.factorial(j)) * p2*d1
-            self.ay += (1/math.factorial(j)) * p2*d2
+        for i in range(1,self.trunc_derivative+1):
+            p1 = lib.kProd(i,self.dx_vec)
+            p2 = kp(p1,sym.eye(self.dim))
+
+            for j,key in enumerate(self.var_names):
+                
+                d1 = lib.vec(lib.df(self.rhs_sym[j],self.x_vec,i+1))
+                #print((1/math.factorial(i)))
+                self.a[key] += (1/math.factorial(i))*p2*d1
+                
+                
+          
+        self.A = sym.zeros(self.dim,self.dim)
         
-        self.A = sym.zeros(2,2)
+        for i,key in enumerate(self.var_names):            
+            self.A[:,i] = self.a[key]
         
-        self.A[:,0] = self.ax
-        self.A[:,1] = self.ay
-        
-        
-        het = self.A*self.z_expansion
+        het = self.A*self.z['vec']
         
         # expand all terms
-        self.hetx = sym.expand(het[0].subs([(self.dx,self.gx),(self.dy,self.gy)]))
-        self.hety = sym.expand(het[1].subs([(self.dx,self.gx),(self.dy,self.gy)]))
+        out = {}
+        for i,key in enumerate(self.var_names):
+            het_key = sym.expand(het[i]).subs(self.rule_d2g)
+            het_key = sym.collect(het_key,self.psi)
+            het_key = sym.expand(het_key)
+            het_key = sym.collect(het_key,self.psi)
+            #print(key,het_key)
+            
+            #print(i,key,het_key)
+            #print(sym.apart(expr))
+            #print(sym.collect(expr,self.psi,evaluate=False))
+            #het_key = sym.collect(het_key,self.psi,evaluate=False)
+            out[key] = het_key
+            
+        #het = {key: sym.expand(het[i]).subs(self.rule_d2g)
+        #       for i,key in enumerate(self.var_names)}
+        #self.hetx = sym.expand(het[0].subs([(self.dx,self.gx),(self.dy,self.gy)]))
+        #self.hety = sym.expand(het[1].subs([(self.dx,self.gx),(self.dy,self.gy)]))
         
         # collect all psi terms into factors of pis^k
-        self.hetx_powers = sym.collect(self.hetx,self.psi,evaluate=False)
-        self.hety_powers = sym.collect(self.hety,self.psi,evaluate=False)
-    
+        #self.het1_collected = {k: sym.collect(het[k],self.psi,evaluate=False)
+        #                        for k in self.var_names}
+        
+        return out
         
     def load_z(self):
         
-        # load all g or recompute or compute new.
-        self.z_data, self.zx_imp, self.zy_imp = ([] for i in range(3))
-        self.zx_callable, self.zy_callable = ([] for i in range(2))
-
-        if self.recompute_z or not(lib.files_exist(self.z_fnames)):
-            
-            print('* Computing...',end=' ')
-            for i in range(self.miter):
-                print('z_'+str(i), end=', ')
-                data = self.generate_z(i)
-                self.z_data.append(data)
-                np.savetxt(self.z_fnames[i],data)
-            print()
-            
-        else:
-            self.z_data, self.zx_imp, self.zy_imp = self.load_sols(self.z_fnames,symName='z')
-            
-        for i in range(len(self.z_data)):
-            
-            self.zx_callable.append(lambdify(self.t,self.zx_imp[i](self.t)))
-            self.zy_callable.append(lambdify(self.t,self.zy_imp[i](self.t)))
+        """
+        load all PRCs z or recompute
+        """
         
+        self.z['dat'] = []
+        
+        for key in self.var_names:
+            self.z['imp_'+key] = []
+            self.z['lam_'+key] = []
+            
+        print('* Computing...', end=' ')
+        for i in range(self.miter):
+            print('z_'+str(i),end=', ')
+            fname = self.z['dat_fnames'][i]
+            file_does_not_exist = not(os.path.exists(fname))
+            #print('z fname',fname)
+            if self.recompute_z or file_does_not_exist:
+                
+                het_vec = self.interp_lam(i,self.z,fn_type='z')
+                
+                data = self.generate_z(i,het_vec)
+                np.savetxt(self.z['dat_fnames'][i],data)
+                
+            else:
+                data = np.loadtxt(fname)
+                
+            if False:
+                fig, axs = plt.subplots(nrows=self.dim,ncols=1)
+                
+                for j,ax in enumerate(axs):
+                    key = self.var_names[j]
+                    ax.plot(self.tLC,data[:,j],label=key)
+                    ax.legend()
+                
+                print('z'+str(i)+' init',data[0,:])
+                axs[0].set_title('z'+str(i))
+                plt.tight_layout()
+                plt.show(block=True)
+                time.sleep(.1)
+                    
+            self.z['dat'].append(data)
+            
+            for j,key in enumerate(self.var_names):
+                
+                fn_temp = interpb(self.tLC,data[:,j],self.T)
+                imp_temp = imp_fn('z'+key+'_'+str(i),self.fmod(fn_temp))
+                self.z['imp_'+key].append(imp_temp)
+                
+                lam_temp = lambdify(self.t,self.z['imp_'+key][i](self.t))
+                self.z['lam_'+key].append(lam_temp)
+            
+
+        
+        print()
         # coupling
         thA = self.thA
         thB = self.thB
         
-        rule_zxA = {Indexed('zxA',i):self.zx_imp[i](thA) for i in range(self.miter)}
-        rule_zyA = {Indexed('zyA',i):self.zy_imp[i](thA) for i in range(self.miter)}
-        
-        rule_zxB = {Indexed('zxB',i):self.zx_imp[i](thB) for i in range(self.miter)}
-        rule_zyB = {Indexed('zyB',i):self.zy_imp[i](thB) for i in range(self.miter)}
-        
-        self.rule_z_AB = {**rule_zxA,**rule_zyA,**rule_zxB,**rule_zyB}
-
+        self.rule_z_AB = {}
+        for key in self.var_names:
+            for i in range(self.miter):
+                dictA = {Indexed('z'+key+'A',i):self.z['imp_'+key][i](thA)}
+                dictB = {Indexed('z'+key+'B',i):self.z['imp_'+key][i](thB)}
+                
+                self.rule_z_AB.update(dictA)
+                self.rule_z_AB.update(dictB)
 
     
-    def generate_z(self,k):
-        
-        # load kth expansion of g for k >= 1
-        rulex = {sym.Indexed('zx',i):self.zx_imp[i](self.t) for i in range(k)}
-        ruley = {sym.Indexed('zy',i):self.zy_imp[i](self.t) for i in range(k)}
-        rule = {**rulex,**ruley,**self.rule_g,**self.rule_LC,**self.rule_par}
-        
-        zhx = self.hetx_sym[k].subs(rule)
-        zhy = self.hety_sym[k].subs(rule)
-        
-        hetx_lam = lambdify(self.t,zhx)
-        hety_lam = lambdify(self.t,zhy)
+    def generate_z(self,k,het_vec):
         
         if k == 0:
             init = copy.deepcopy(self.z0_init)
+            #init = np.array([1.,1.,1.])
+            eps = 1e-1
+            #init = [-1.389, -1.077, 9.645, 0]
         else:
-            init = lib.run_newton(self,self.dz,[0,0],hetx_lam,hety_lam,k,
-                                  max_iter=200,rel_tol=self.rel_tol,rel_err=10,eps=1e-1)
+            init = np.zeros(self.dim)
+            eps = 1e-1
             
-        sol = solve_ivp(self.dz,[0,-self.tLC[-1]],init,args=(hetx_lam,hety_lam,k),
+            init = lib.run_newton2(self,self.dz,init,k,het_vec,
+                                  max_iter=100,eps=eps,
+                                  rel_tol=1e-8,rel_err=10,
+                                  backwards=True)
+            
+        sol = solve_ivp(self.dz,[0,-self.tLC[-1]],
+                        init,args=(k,het_vec),
                         method=self.method,dense_output=True,
                         t_eval=-self.tLC,
                         rtol=self.rtol,atol=self.atol)
             
         zu = sol.y.T[::-1]
+        #zu = sol.y.T
         
         if k == 0:
             # normalize
-            dLC = self.f(np.cos(0),np.sin(0))  # lib.rhs([np.cos(0),np.sin(0)],0,self.f)
+            x0,y0 = [self.LC['lam_x'](0),
+                        self.LC['lam_y'](0)]
             
-            zu = zu/(np.dot(dLC,zu[0,:]))
+            dLC = self.rhs(0,[x0,y0])
+            zu = self.omega*zu/(np.dot(dLC,zu[0,:]))
             
-        if False:
-            #print('dx',dx)
-            #print(obj.tLC)
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.plot(sol.t,zu)
-            #ax.plot(gu[::-1,:])
-            ax.set_title('z'+str(k))
-            plt.show(block=True)
-            #time.sleep(2)
-            plt.close()
-        
-        #fnx = interp1d(self.tLC,zu[:,0],fill_value='extrapolate',assume_sorted=True)
-        #fny = interp1d(self.tLC,zu[:,1],fill_value='extrapolate',assume_sorted=True)
-        
-        fnx = interpb(self.tLC,zu[:,0])
-        fny = interpb(self.tLC,zu[:,1])
-        
-        self.zx_imp.append(implemented_function('zx_'+str(k), self.myFunMod(fnx)))
-        self.zy_imp.append(implemented_function('zy_'+str(k), self.myFunMod(fny)))
-        
-        self.zx_callable.append(lambdify(self.t,self.zx_imp[k](self.t)))
-        self.zy_callable.append(lambdify(self.t,self.zy_imp[k](self.t)))
-        
         return zu
     
 
     def load_i(self):
+        """
+        load all IRCs i or recomptue
+        """
         
-        # load all g or recompute or compute new.
-        self.i_data, self.ix_imp, self.iy_imp = ([] for i in range(3))
-        self.ix_callable, self.iy_callable = ([] for i in range(2))
-
-        if self.recompute_i or not(lib.files_exist(self.i_fnames)):
-            
-            print('* Computing...',end=' ')
-            for i in range(self.miter):
-                print('i_'+str(i), end=', ')
-                data = self.generate_i(i)
-                self.i_data.append(data)
-                np.savetxt(self.i_fnames[i],data)
-            print()
-            
-        else:
-            self.i_data, self.ix_imp, self.iy_imp = self.load_sols(self.i_fnames,symName='i')
-            
+        self.i['dat'] = []
         
-        for i in range(len(self.i_data)):
-            self.ix_callable.append(lambdify(self.t,self.ix_imp[i](self.t)))
-            self.iy_callable.append(lambdify(self.t,self.iy_imp[i](self.t)))
-    
+        for key in self.var_names:
+            self.i['imp_'+key] = []
+            self.i['lam_'+key] = []
+        
+        print('* Computing...', end=' ')
+        for i in range(self.miter):
+            print('i_'+str(i),end=', ')
+            fname = self.i['dat_fnames'][i]
+            file_does_not_exist = not(os.path.exists(fname))
+            
+            if self.recompute_i or file_does_not_exist:
+                
+                het_lams = self.interp_lam(i,self.i)
+                
+                data = self.generate_i(i,het_lams)
+                np.savetxt(self.i['dat_fnames'][i],data)
+                
+            else:
+                data = np.loadtxt(fname)
+                
+            if False:
+                fig, axs = plt.subplots(nrows=self.dim,ncols=1)
+                
+                for j,ax in enumerate(axs):
+                    key = self.var_names[j]
+                    ax.plot(self.tLC,data[:,j],label=key)
+                    ax.legend()
+                    
+                print('i'+str(i)+' init',data[0,:])
+                axs[0].set_title('i'+str(i))
+                plt.tight_layout()
+                plt.show(block=True)
+                time.sleep(.1)
+                
+            self.i['dat'].append(data)
+            
+            for j,key in enumerate(self.var_names):
+                fn_temp = interpb(self.tLC,data[:,j],self.T)
+                imp_temp = imp_fn('i'+key+'_'+str(i),self.fmod(fn_temp))
+                self.i['imp_'+key].append(imp_temp)
+                
+                lam_temp = lambdify(self.t,self.i['imp_'+key][i](self.t))
+                self.i['lam_'+key].append(lam_temp)
+                
+            
+               
+        print()
+        
         # coupling
         thA = self.thA
         thB = self.thB
         
-        rule_ixA = {Indexed('ixA',i):self.ix_imp[i](thA) for i in range(self.miter)}
-        rule_iyA = {Indexed('iyA',i):self.iy_imp[i](thA) for i in range(self.miter)}
-        
-        rule_ixB = {Indexed('ixB',i):self.ix_imp[i](thB) for i in range(self.miter)}
-        rule_iyB = {Indexed('iyB',i):self.iy_imp[i](thB) for i in range(self.miter)}
-        
-        self.rule_i_AB = {**rule_ixA,**rule_iyA,**rule_ixB,**rule_iyB}
+        self.rule_i_AB = {}
+        for key in self.var_names:
+            for i in range(self.miter):
+                dictA = {Indexed('i'+key+'A',i):self.i['imp_'+key][i](thA)}
+                dictB = {Indexed('i'+key+'B',i):self.i['imp_'+key][i](thB)}
+                
+                self.rule_i_AB.update(dictA)
+                self.rule_i_AB.update(dictB)
     
     
-    
-    def generate_i(self,k):
+    def generate_i(self,k,het_lams):
         """
         i0 equation is stable in forwards time
         i1, i2, etc equations are stable in backwards time.
 
         """
-        
-        # load kth expansion of g for k >= 1
-        rulex = {sym.Indexed('zx',i):self.ix_imp[i](self.t) for i in range(k)}
-        ruley = {sym.Indexed('zy',i):self.iy_imp[i](self.t) for i in range(k)}
-        rule = {**rulex,**ruley,**self.rule_g,**self.rule_LC,**self.rule_par}
-        
-        
-        
-        ihx = self.hetx_sym[k].subs(rule)
-        ihy = self.hety_sym[k].subs(rule)
-        
-        #print(k,ihx)
-        
-        hetx_lam = lambdify(self.t,ihx)
-        hety_lam = lambdify(self.t,ihy)
-        
-        
         if k == 0:
             init = copy.deepcopy(self.i0_init)
+            eps = 1e-2
+            exception=False
             #print(init)
-            sol = solve_ivp(self.di,[0,self.tLC[-1]],init,
-                            args=(hetx_lam,hety_lam,k),
-                            t_eval=self.tLC,
-                            method=self.method,dense_output=True,
-                            rtol=self.rtol,atol=self.atol)
+            #sol = solve_ivp(self.di,[0,-self.tLC[-1]],init,
+            #                args=(k,),
+            #                t_eval=-self.tLC,
+            #                method=self.method,dense_output=True,
+            #                rtol=self.rtol,atol=self.atol)
             
-            iu = sol.y.T
+            #iu = sol.y.T[::-1,:]
             
         else:
             
-            init = lib.run_newton(self,self.di,[0,0],hetx_lam,hety_lam,k,
-                                  max_iter=100,rel_tol=self.rel_tol,
-                                  rel_err=10,eps=1e-1,backwards=True)
+            #print('het i',het_lams['v'](1))
+            init = np.zeros(self.dim)
+        
+            if k == 1:
+                exception = False
+                eps = 1e-2
+            else:
+                exception = False
+                eps = 1e-2
+                
+                
+            init = lib.run_newton2(self,self.di,init,k,het_lams,
+                                   max_iter=100,rel_tol=1e-9,
+                                   rel_err=5,eps=eps,
+                                   backwards=True,exception=exception)
+        #t = -1.06881
+        #print('i init',init)
+        #print('myY',self.LC['lam_v'](t),self.LC['lam_h'](t))
+        
+        #print('di',self.di(t,[2.72731,0.896643,24.0568,0],k,het_lams))
+        #print('jlc',self.jacLC(t).T)
+        
+        sol = solve_ivp(self.di,[0,-self.tLC[-1]],init,
+                        args=(k,het_lams),
+                        t_eval=-self.tLC,
+                        method=self.method,dense_output=True,
+                        rtol=self.rtol,atol=self.atol)
+    
+        iu = sol.y.T[::-1,:]
+        #iu = sol.y.T
+        
+        if k == 0:
             
-            sol = solve_ivp(self.di,[0,-self.tLC[-1]],init,
-                            args=(hetx_lam,hety_lam,k),
-                            t_eval=-self.tLC,
-                            method=self.method,dense_output=True,
-                            rtol=self.rtol,atol=self.atol)
-        
-            iu = sol.y.T[::-1,:]
-        
+            # normalize
+            c = np.dot(self.g1_init,iu[0,:])
+            print('g1 init',self.g1_init)
+            print('iu[0,:]',iu[0,:])
+            print('i0 init',self.i0_init)
+            print('constant dot',c)
+            iu /= c
+            #time.sleep(10)
+    
         if k == 1:  # normalize
             
-            gx = lambdify(self.t,self.gx_imp[1](self.t))
-            gy = lambdify(self.t,self.gy_imp[1](self.t))
+            F = self.rhs(0,[self.LC['lam_x'](0),
+                            self.LC['lam_y'](0)])
             
-            zx = lambdify(self.t,self.zx_imp[0](self.t))
-            zy = lambdify(self.t,self.zy_imp[0](self.t))
+            g1 = np.array([self.g['lam_x'][1](0),
+                           self.g['lam_y'][1](0)])
             
-            ix = lambdify(self.t,self.ix_imp[0](self.t))
-            iy = lambdify(self.t,self.iy_imp[0](self.t))
+            z0 = np.array([self.z['lam_x'][0](0), 
+                           self.z['lam_y'][0](0)])
             
-            F = lib.rhs([np.cos(0),np.sin(0)],0,self.f)
-            g1 = np.array([gx(0),gy(0)])
-            z0 = np.array([zx(0),zy(0)])
-            i0 = np.array([ix(0),iy(0)])
+            i0 = np.array([self.i['lam_x'][0](0),
+                           self.i['lam_y'][0](0)])
             
             J = self.jacLC(0)
             i1 = iu[0,:]
@@ -1006,282 +1002,290 @@ class CGL(object):
             ijg = np.dot(i0,np.dot(J,g1))
             be = (self.kappa - ijg - np.dot(i1,F))/(np.dot(z0,F))
             
+            #print('actual',np.dot(F,i1))
+            #print('expect',np.dot(i0,np.dot(self.kappa*self.eye-J,g1)))
+            #print('canchg',z0)
+            #print('amtchg',np.dot(F,z0))
+            #print('mymult',be)
+            #print('i1 unnormalized init',i1)
+            
+            
+            
             init = iu[0,:] + be*z0
             
-            
             sol = solve_ivp(self.di,[0,-self.tLC[-1]],init,
-                            args=(hetx_lam,hety_lam,k),
+                            args=(k,het_lams),
                             t_eval=-self.tLC,
                             method=self.method,dense_output=True)
             
             iu = sol.y.T[::-1]
             
-        if True:
-            #print(obj.tLC)
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.plot(iu)
-            ax.set_title('i'+str(k))
-            plt.show(block=True)
-            #time.sleep(2)
-            plt.close()
-        
-    
-        #fnx = interp1d(self.tLC,iu[:,0],fill_value='extrapolate',assume_sorted=True)
-        #fny = interp1d(self.tLC,iu[:,1],fill_value='extrapolate',assume_sorted=True)
-        
-        fnx = interpb(self.tLC,iu[:,0])
-        fny = interpb(self.tLC,iu[:,1])
-        
-        self.ix_imp.append(implemented_function('ix_'+str(k), self.myFunMod(fnx)))
-        self.iy_imp.append(implemented_function('iy_'+str(k), self.myFunMod(fny)))
-        
-        self.ix_callable.append(lambdify(self.t,self.ix_imp[k](self.t)))
-        self.iy_callable.append(lambdify(self.t,self.iy_imp[k](self.t)))
         
         return iu
 
     def load_k_sym(self):
+        
+        """
+        kA, kB contain the ith order terms of expanding the coupling fun.
+        cA, cB contain the derivatives of the coupling fn.
+        """
         # load het. functions h if they exist. otherwise generate.
         #self.rule_g0 = {sym.Indexed('gx',0):s(0),sym.Indexed('gy',0):s(0)}
-        self.KxA, self.KyA, self.KxB, self.KyB = ([] for i in range(4))
         
-
+        for key in self.var_names:
+            self.kA['sym_'+key] = []
+            self.kA['imp_'+key] = []
+            
+            self.kB['sym_'+key] = []
+            self.kB['dat_'+key] = []
+            
+        # check that files exist
+        val = 0
+        for key in self.var_names:
+            val += not(lib.files_exist(self.kA['sym_fnames_'+key]))
+            val += not(lib.files_exist(self.kB['sym_fnames_'+key]))
+            val += not(os.path.isfile(self.cA['sym_fname']))
+            val += not(os.path.isfile(self.cB['sym_fname']))
         
-        if self.recompute_k_sym or not(lib.files_exist(self.kxA_fnames,
-                                                       self.kyA_fnames,
-                                                       self.kxB_fnames,
-                                                       self.kyB_fnames,
-                                                       [self.cA_fname,
-                                                        self.cB_fname])):
+        if val != 0:
+            files_do_not_exist = True
+        else:
+            files_do_not_exist = False
+        
+        if self.recompute_k_sym or files_do_not_exist:
             
             print('* Computing... K symbolic')
-            self.generate_k_sym()  # create symbolic derivative
+            self.cA, self.cB = self.generate_k_sym()
             
-            self.cA = Matrix([[self.cxA],[self.cyA]])
-            self.cB = Matrix([[self.cxB],[self.cyB]])
+            self.cA['vec'] = sym.zeros(self.dim,1)
+            self.cB['vec'] = sym.zeros(self.dim,1)
+            
+            for i,key in enumerate(self.var_names):
+                self.cA['vec'][i] = self.cA[key]
+                self.cB['vec'][i] = self.cB[key]
             
             # dump
-            dill.dump(self.cA,open(self.cA_fname,'wb'),recurse=True)
-            dill.dump(self.cB,open(self.cB_fname,'wb'),recurse=True)
+            dill.dump(self.cA['vec'],open(self.cA['sym_fname'],'wb'),recurse=True)
+            dill.dump(self.cB['vec'],open(self.cB['sym_fname'],'wb'),recurse=True)
             
-            self.cxA_collected = collect(expand(self.cxA),self.eps,evaluate=False)
-            self.cyA_collected = collect(expand(self.cyA),self.eps,evaluate=False)
-            self.cxB_collected = collect(expand(self.cxB),self.eps,evaluate=False)
-            self.cyB_collected = collect(expand(self.cyB),self.eps,evaluate=False)
+            for key in self.var_names:
+                collectedA = collect(expand(self.cA[key]),self.eps)
+                collectedA = collect(expand(collectedA),
+                                     self.eps,evaluate=False)
                 
-            for i in range(self.miter):
+                collectedB = collect(expand(self.cB[key]),self.eps)
+                collectedB = collect(expand(collectedB),
+                                     self.eps,evaluate=False)
                 
-                # save each order to list and dill.
-                eps_i_termxA = self.cxA_collected[self.eps**i]
-                eps_i_termyA = self.cyA_collected[self.eps**i]
-                eps_i_termxB = self.cxB_collected[self.eps**i]
-                eps_i_termyB = self.cyB_collected[self.eps**i]
                 
-                self.KxA.append(eps_i_termxA)
-                self.KyA.append(eps_i_termyA)
-                self.KxB.append(eps_i_termxB)
-                self.KyB.append(eps_i_termyB)
+                self.cA[key+'_col'] = collectedA
+                self.cB[key+'_col'] = collectedB
                 
-                dill.dump(self.KxA[i],open(self.kxA_fnames[i],'wb'),
-                          recurse=True)
-                dill.dump(self.KyA[i],open(self.kyA_fnames[i],'wb'),
-                          recurse=True)
-                dill.dump(self.KxB[i],open(self.kxB_fnames[i],'wb'),
-                          recurse=True)
-                dill.dump(self.KyB[i],open(self.kyB_fnames[i],'wb'),
-                          recurse=True)
+                
+                for i in range(self.miter):
+                    
+                    # save each order to list and dill.
+                    if self.cA[key+'_col']:
+                        eps_i_termA = self.cA[key+'_col'][self.eps**i]
+                        eps_i_termB = self.cB[key+'_col'][self.eps**i]
+                        
+                    else:
+                        eps_i_termA = 0
+                        eps_i_termB = 0
+                    
+                    self.kA['sym_'+key].append(eps_i_termA)
+                    self.kB['sym_'+key].append(eps_i_termB)
+                    
+                    dill.dump(self.kA['sym_'+key][i],
+                              open(self.kA['sym_fnames_'+key][i],'wb'),
+                              recurse=True)
+                    
+                    dill.dump(self.kB['sym_'+key][i],
+                              open(self.kB['sym_fnames_'+key][i],'wb'),
+                              recurse=True)
+                    
                 
         else:
-            self.KxA = lib.load_dill(self.kxA_fnames)
-            self.KyA = lib.load_dill(self.kyA_fnames)
-            self.KxB = lib.load_dill(self.kxB_fnames)
-            self.KyB = lib.load_dill(self.kyB_fnames)
+            for key in self.var_names:
+                self.kA['sym_'+key] = lib.load_dill(self.kA['sym_fnames_'+key])
+                self.kB['sym_'+key] = lib.load_dill(self.kB['sym_fnames_'+key])
             
-            self.cA = lib.load_dill([self.cA_fname])[0]
-            self.cB = lib.load_dill([self.cB_fname])[0]
+            self.cA['vec'] = lib.load_dill([self.cA['sym_fname']])[0]
+            self.cB['vec'] = lib.load_dill([self.cB['sym_fname']])[0]
             
             
     def generate_k_sym(self):
         # generate terms involving the coupling term (see K in paper).
         
         # find K_i^{j,k}
-        coupA = self.CGL_coupling(*self.x_pairA,option='sym')
-        coupB = self.CGL_coupling(*self.x_pairB,option='sym')
-        
-        cx_symA = coupA[0]
-        cy_symA = coupA[1]
-        
-        cx_symB = coupB[0]
-        cy_symB = coupB[1]
-        
-        cxA = cx_symA + lib.df(cx_symA,self.x_pairA,1).dot(self.dx_pairA)
-        cyA = cy_symA + lib.df(cy_symA,self.x_pairA,1).dot(self.dx_pairA)
-        
-        cxB = cx_symB + lib.df(cx_symB,self.x_pairB,1).dot(self.dx_pairB)
-        cyB = cy_symB + lib.df(cy_symB,self.x_pairB,1).dot(self.dx_pairB)
+        coupA = self.coupling(self.A_pair,option='sym')
+        coupB = self.coupling(self.B_pair,option='sym')
+
         
         # get expansion for coupling term
+
+        # 0 and 1st derivative
+        for i,key in enumerate(self.var_names):
+            self.cA[key] = coupA[i]
+            self.cA[key] += lib.df(coupA[i],self.A_pair,1).dot(self.dA_pair)
+            
+            self.cB[key] = coupB[i]
+            self.cB[key] += lib.df(coupB[i],self.B_pair,1).dot(self.dB_pair)
+        
+        # 2nd + derivative
         for i in range(2,self.trunc_derivative+1):
             # all x1,x2 are evaluated on limit cycle x=cos(t), y=sin(t)
-            kA = lib.kProd(i,self.dx_pairA)
-            dxA = lib.vec(lib.df(cx_symA,self.x_pairA,i))
-            dyA = lib.vec(lib.df(cy_symA,self.x_pairA,i))
+            kA = lib.kProd(i,self.dA_pair)
+            kB = lib.kProd(i,self.dB_pair)
+            #print(i)
             
-            cxA += (1/math.factorial(i)) * kA.dot(dxA)
-            cyA += (1/math.factorial(i)) * kA.dot(dyA)
-    
-            kB = lib.kProd(i,self.dx_pairB)
-            dxB = lib.vec(lib.df(cx_symB,self.x_pairB,i))
-            dyB = lib.vec(lib.df(cy_symB,self.x_pairB,i))
+            for key in self.var_names:
+                dA = lib.vec(lib.df(self.cA[key],self.A_pair,i))
+                dB = lib.vec(lib.df(self.cB[key],self.B_pair,i))
+                
+                self.cA[key] += (1/math.factorial(i))*kA.dot(dA)
+                self.cB[key] += (1/math.factorial(i))*kB.dot(dB)
+        
+                #print('* ',key,dA,self.cA[key])
+                
+                
+        rule = {}
+        for i,key in enumerate(self.var_names):
+            rule.update({self.dA_vars[i]:self.g[key+'_epsA']})
+            rule.update({self.dB_vars[i]:self.g[key+'_epsB']})
             
-            cxB += (1/math.factorial(i)) * kB.dot(dxB)
-            cyB += (1/math.factorial(i)) * kB.dot(dyB)
+        
+        for key in self.var_names:
+            self.cA[key] = self.cA[key].subs(rule)
+            self.cB[key] = self.cB[key].subs(rule)
+            #print('self.cA[key]',self.cA[key])
+        #print('self.ca',self.cA)
+        return self.cA, self.cB
     
-        
-        rule = {'dxA':self.gx_epsA,'dyA':self.gy_epsA,
-                'dxB':self.gx_epsB,'dyB':self.gy_epsB}
-        
-        self.cxA = cxA.subs(rule)
-        self.cyA = cyA.subs(rule)
-
-        self.cxB = cxB.subs(rule)
-        self.cyB = cyB.subs(rule)
-        
-        #self.ghx_sym_collected = sym.collect(self.hx[0],self.psi,evaluate=False)
-
 
     def load_p_sym(self):
         """
         generate/load the het. terms for psi ODEs.
+            
+        to be solved using integrating factor meothod.
+        
+        pA['sym'][k] is the forcing function of order k
         """
         
-        # load het. functions h if they exist. otherwise generate.
-        self.p_rhsA, self.p_rhsB, self.ph_symA, self.ph_symB = ([] for i in range(4))
+        self.pA['sym'] = []
+        #self.pB['sym'] = []
         
-        if self.recompute_p_sym or not(lib.files_exist(self.p_rhsA_fnames,
-                                                       #self.p_rhsB_fnames,
-                                                       self.ph_symA_fnames)):
-                                                       #self.ph_symB_fnames)):
-            
-            print('* Computing... p symbolic')
-            self.generate_p_sym()  # create symbolic derivative
-            
-            
+        print('* Computing... p symbolic')
+        if self.recompute_p_sym or not(lib.files_exist(self.pA['sym_fnames'])):
+
+            ircA = self.eps*self.i['vecA'].dot(self.cA['vec'])
+            ircA = collect(expand(ircA),self.eps)
+            ircA = collect(expand(ircA),self.eps)
+
             for i in range(self.miter):
                 # save each order to list and dill.
-                eps_i_termA = self.ircA.coeff(self.eps,i)
-                #eps_i_termA = eps_i_termA.subs(rule)
-                
-                #eps_i_termB = self.ircB.coeff(self.eps,i)
-                #eps_i_termB = eps_i_termB.subs(rule)
-                
-                self.p_rhsA.append(eps_i_termA)
-                #self.p_rhsB.append(eps_i_termB)
-                
-                self.ph_symA.append(eps_i_termA - self.kap_sym*Indexed('pA',i))
-                #self.ph_symB.append(eps_i_termB - self.kap_sym*Indexed('pB',i))
-                
-                dill.dump(self.p_rhsA[i],open(self.p_rhsA_fnames[i],'wb'),
-                          recurse=True)
-                #dill.dump(self.p_rhsB[i],open(self.p_rhsB_fnames[i],'wb'),
-                #          recurse=True)
-                dill.dump(self.ph_symA[i],open(self.ph_symA_fnames[i],'wb'),
-                          recurse=True)
-                #dill.dump(self.ph_symB[i],open(self.ph_symB_fnames[i],'wb'),
-                #          recurse=True)
-                
+                eps_i_termA = ircA.coeff(self.eps,i)
+                self.pA['sym'].append(eps_i_termA)
+           
+                dill.dump(self.pA['sym'][i],
+                          open(self.pA['sym_fnames'][i],'wb'),recurse=True)
+
         else:
-            self.p_rhsA = lib.load_dill(self.p_rhsA_fnames)
-            #self.p_rhsB = lib.load_dill(self.p_rhsB_fnames)
-            self.ph_symA = lib.load_dill(self.ph_symA_fnames)
-            #self.ph_symB = lib.load_dill(self.ph_symB_fnames)
+            self.pA['sym'] = lib.load_dill(self.pA['sym_fnames'])
         
-        
-    def generate_p_sym(self):
-        
-        # collect left and right hand terms
-        ircA = self.kap_sym*self.pA + self.eps*self.iA.dot(self.cA)
-        self.ircA = collect(expand(ircA),self.eps)
-        
-        ircB = self.kap_sym*self.pB + self.eps*self.iB.dot(self.cB)
-        self.ircB = collect(expand(ircB),self.eps)
-
-
     def load_p(self):
         """
         generate/load the ODEs for psi.
         """
         
-        self.NA = 70
-        self.NB = 71
-        self.A_array = np.linspace(0,self.T,self.NA)
-        self.B_array = np.linspace(0,self.T,self.NB)
+        #self.A_mg, self.B_mg = np.meshgrid(self.A_array,self.B_array)
         
-        self.A_mg, self.B_mg = np.meshgrid(self.A_array,self.B_array)
-        
-        self.interval = np.linspace(0,4,50)
-        self.ds = (self.interval[-1]-self.interval[0])/len(self.interval)
-        self.dxA = (self.A_array[-1]-self.A_array[0])/len(self.A_array)
-        self.dxB = (self.B_array[-1]-self.B_array[0])/len(self.B_array)
+        #self.interval,self.ds = np.linspace(0,300,10000,retstep=True)
+        #self.ds = (self.interval[-1]-self.interval[0])/len(self.interval)
+        #self.dxA = (self.A_array[-1]-self.A_array[0])/len(self.A_array)
+        #self.dxB = (self.B_array[-1]-self.B_array[0])/len(self.B_array)
         
         # load all p or recompute or compute new.
-        self.pA_data, self.pB_data, self.pA_imp, self.pB_imp = ([] for i in range(4))
-        self.pA_callable, self.pB_callable = ([] for i in range(2))
+        self.pA['dat'] = []
+        self.pA['imp'] = []
+        self.pA['lam'] = []
+        
+        #self.pA_data, self.pB_data, self.pA_imp, self.pB_imp = ([] for i in range(4))
+        #self.pA_callable, self.pB_callable = ([] for i in range(2))
 
         # generate
         #if self.recompute_p or not(lib.files_exist(self.pA_fnames,self.pB_fnames)):
-        if self.recompute_p or not(lib.files_exist(self.pA_fnames)):
-            print('* Computing...',end=' ')
-            for i in range(self.miter):
-                print('p_'+str(i),end=', ')
-                self.generate_p(i)
-            print()
-            
-            # save
-            for i in range(self.miter):
-                
-                np.savetxt(self.pA_fnames[i],self.pA_data[i])
-                #np.savetxt(self.pB_fnames[i],self.pB_data[i])
         
-
-        else:  # load
-            listsA = self.load_sols(self.pA_fnames,symName='pA',varnum=2)
-            self.pA_data,self.pA_imp,self.pA_callable = listsA
+        print('* Computing...',end=' ')
+        self.pool = _ProcessPool(processes=10)
+        
+        for i,fname in enumerate(self.pA['dat_fnames']):
+            A_array,dxA = np.linspace(0,self.T,self.NA[i],retstep=True,
+                                      endpoint=True)
+            B_array,dxB = np.linspace(0,self.T,self.NB[i],retstep=True,
+                                      endpoint=True)
             
-            #listsB = self.load_sols(self.pB_fnames,symName='pB',varnum=2)
-            #self.pB_data,self.pB_imp,self.pA_callable = listsB
+            
+            print('p_'+str(i),end=', ')
+            if self.recompute_p or not(os.path.isfile(fname)):
+                
+                pA_data = self.generate_p(i,A_array,B_array)
+                np.savetxt(self.pA['dat_fnames'][i],pA_data)
+                
+            else:
+                pA_data = np.loadtxt(fname)
+            
+            pA_interp = interp2d(A_array,B_array,
+                                 pA_data,bounds_error=False,
+                                 fill_value=None)
+            
+            pA_interp2 = interp2db(pA_interp,self.T)
+            
+            pA_imp = implemented_function('pA_'+str(i),self.fLam2(pA_interp2))
+            
+            
+            self.pA['dat'].append(pA_data)
+            
+            if i == 0:
+                self.pA['imp'].append(implemented_function('pA_0', lambda x: 0))
+                self.pA['lam'].append(0)
+            
+            else:
+                self.pA['imp'].append(pA_imp)
+                self.pA['lam'].append(pA_interp)
+                        
+        self.pool.close()
+        self.pool.join()
+        self.pool.terminate()
+        print()
         
         ta = self.thA
         tb = self.thB
-        rulepA = {sym.Indexed('pA',i):self.pA_imp[i](ta,tb) for i in range(self.miter)}
-        rulepB = {sym.Indexed('pB',i):self.pA_imp[i](tb,ta) for i in range(self.miter)}
-        
-        self.rule_p_AB = {**rulepA,**rulepB}
         
         
-    
-    def generate_p(self,k):
+        rule_pA = {sym.Indexed('pA',i):self.pA['imp'][i](ta,tb)
+                       for i in range(self.miter)}
+        rule_pB = {sym.Indexed('pB',i):self.pA['imp'][i](tb,ta)
+                       for i in range(self.miter)}
+        
+        self.rule_p_AB = {**rule_pA,**rule_pB}
+        
+    def generate_p(self,k,A_array,B_array):
+        import scipy as sp
+        import numpy as np
+        
         ta = self.thA
         tb = self.thB
         
         if k == 0:
-            # g0 is 0
-            self.pA_data.append(np.zeros((self.NB,self.NA)))
-            #self.pB_data.append(np.zeros((self.NA,self.NB)))
-            
-            self.pA_imp.append(implemented_function('pA0', lambda x: 0))
-            #self.pB_imp.append(implemented_function('pB0', lambda x: 0))
-            
-            self.pA_callable.append(0)
-            #self.pB_callable.append(0)
-            
-            return
+            #pA0 is 0 (no forcing function)
+            return np.zeros((self.NB[k],self.NA[k]))
         
         # put these implemented functions into the expansion
-        ruleA = {sym.Indexed('pA',i):self.pA_imp[i](ta,tb) for i in range(k)}
-        #ruleB = {sym.Indexed('pB',i):self.pB_imp[i](tb,ta) for i in range(k)}
-        ruleB = {sym.Indexed('pB',i):self.pA_imp[i](tb,ta) for i in range(k)}
+        ruleA = {sym.Indexed('pA',i):
+                 self.pA['imp'][i](ta,tb) for i in range(k)}
+        ruleB = {sym.Indexed('pB',i):
+                 self.pA['imp'][i](tb,ta) for i in range(k)}
         
         
         rule = {**ruleA, **ruleB,
@@ -1290,35 +1294,148 @@ class CGL(object):
                 **self.rule_LC_AB,
                 **self.rule_par}
         
-        ph_impA = self.ph_symA[k].subs(rule)
-        #ph_impB = self.ph_symB[k].subs(rule)
+        #print('k, rule:',k,rule)
+        #print('k, self.pA[sym][k]:',k,self.pA['sym'][k])
+        ph_impA = self.pA['sym'][k].subs(rule)
         
+        # this lambidfy calls symbolic functions. slow.
+        # convert lamdify to data and call linear interpolation on that.
+        # then function call is same speed independent of order.
         lam_hetA = lambdify([ta,tb],ph_impA)
-        #lam_hetB = lambdify([tb,ta],ph_impB)
+        lam_hetA_old = lam_hetA
         
-        #pA_data = np.zeros((self.NB,self.NA,len(self.interval)))
-        #pB_data = np.zeros((self.NA,self.NB,len(self.interval)))
         
-        pA_data = np.zeros((self.NB,self.NA))
+        # maximize accuracy of interpolation
+        NA2 = self.TN
+        NB2 = NA2+1
+        lam_hetA_data = np.zeros((NB2,NA2))
         
-        # no choice but to double loop because of interp2d.
-        for i in range(self.NA):
-                
-            for j in range(self.NB):
-                s = self.interval
-                a, b = self.A_array[i], self.B_array[j]
-                
-                intA = np.exp(self.kappa*s)*lam_hetA(a-s,b-s)
-                #intB = np.exp(self.kappa*s)*lam_hetB(b-s,a-s)
-                
-                pA_data[j,i] = np.sum(intA)*self.ds
-                #pB_data[i,j,:] = intB
+        A_array2 = np.linspace(0,self.T,NA2,endpoint=True)
+        B_array2 = np.linspace(0,self.T,NB2,endpoint=True)
         
-        # integrate
-        #pA_data = np.sum(pA_data,axis=-1)*self.ds
-        #pB_data = np.sum(pB_data,axis=-1)*self.ds
+        A_mg2, B_mg2 = np.meshgrid(A_array2,B_array2)
         
-        if False:
+        
+        
+        """
+        for i in range(len(A_array2)):
+            print('i temp',i)
+            for j in range(len(B_array2)):
+                ta2 = A_array2[i]
+                tb2 = B_array2[j]
+                lam_hetA_data[j,i] = lam_hetA(ta2,tb2)
+            
+            aa = lam_hetA(A_array2[i]*np.ones_like(B_array2[:7]),B_array2[:7])
+            print(lam_hetA_data[:7,i])
+            print(aa[:7])
+        """
+        
+        
+        for i in range(len(A_array2)):
+            
+            ta2 = A_array2[i]*np.ones_like(B_array2)
+            tb2 = B_array2
+            lam_hetA_data[:,i] = lam_hetA(ta2,tb2)
+            
+        
+        het_interp = interp2d(A_array2,B_array2,
+                              lam_hetA_data,bounds_error=False,
+                              fill_value=None)
+        
+        het_interp2 = interp2db(het_interp,self.T)
+        
+        #pA_imp = implemented_function('temp',self.fLam2(het_interp2))
+        #pA_interp2 = lambdify([ta,tb],pA_imp(ta,tb))
+        
+        
+        A_mg, B_mg = np.meshgrid(A_array,B_array)
+        
+        # parallelize
+        #s = copy.deepcopy(self.interval)
+        kappa = self.kappa
+       
+        r,c = np.shape(A_mg)
+        a = np.reshape(A_mg,(r*c,))
+        b = np.reshape(B_mg,(r*c,))
+        
+        pA_data = np.zeros((r,c))
+        pA_data = np.reshape(pA_data,(r*c,))
+        
+        
+        #i = 10
+        T = self.T
+        smax = self.smax[k]
+        Ns = self.Ns[k]
+        p_iter = self.p_iter[k]
+        
+        s1,ds1 = np.linspace(0,T,Ns,retstep=True,endpoint=True)
+        s,ds = np.linspace(0,p_iter*T,p_iter*Ns,retstep=True,endpoint=True)
+        
+        idx = np.arange(len(a))
+        exp = np.exp
+        
+        
+        def return_integral(i):
+            #return time integral at position a,b
+            
+            #val = np.sum(pA_interp2(a[i]-s,b[i]-s)*exp(kappa*s))*ds
+            #return val,i
+            
+            pA_one_period = het_interp2(a[i]-s1,b[i]-s1)
+            val = 0
+            for j in range(p_iter):
+                s_interval = np.linspace(j*T,(j+1)*T,Ns,endpoint=True)
+                val += np.sum(pA_one_period*exp(kappa*s_interval))*ds1
+            return val,i
+        
+        """
+        self.interval = np.linspace(0,4,50)
+        self.ds = (self.interval[-1]-self.interval[0])/len(self.interval)
+        s = self.interval
+        for i in range(r*c):
+            
+            
+            intA = np.exp(self.kappa*s)*lam_hetA(a[i]-s,b[i]-s)
+            
+            #intA = np.exp(self.kappa*s)*pA_interp2(a[i]-s,b[i]-s)
+            
+            
+            #err = np.amax(np.abs(intAa-intA))
+            
+            if False and (i % 100 == 0) and (err > 1e-4):
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.plot(intAa)
+                ax.plot(intA)
+                plt.show(block=True)
+                print(i,err)
+                time.sleep(.1)
+            
+            pA_data[i] = np.sum(intA)*self.ds
+            
+            #integral, idx = return_integral(i)
+            #pA_data[i] = integral
+            
+        pA_data = np.reshape(pA_data,(r,c))
+        
+        """
+        
+        
+        p = self.pool
+        
+        print()
+        for x in tqdm.tqdm(p.imap(return_integral,idx,chunksize=200),
+                           total=len(a)):
+            integral, idx = x
+            pA_data[idx] = integral
+            
+            #sys.stderr.write('\rdone {:.0%}'.format(i/len(s)))
+        
+        
+        pA_data = np.reshape(pA_data,(r,c))
+        
+        
+        if True:
             fig = plt.figure()
             ax = fig.add_subplot(111)
             
@@ -1326,65 +1443,77 @@ class CGL(object):
             
             ax.set_ylabel('A')
             ax.set_xlabel('B')
-            ax.set_title('pA sum'+str(k))
-            
-        # turn into interpolated 2d function (inputs automatically taken mod T)
-        pA_interp = interp2d(self.A_array,self.B_array,pA_data,bounds_error=False,
-                             fill_value=None)
-        #pB_interp = interp2d(self.B_array,self.A_array,pB_data,bounds_error=False)
+            ax.set_title('pA data'+str(k))
+            plt.show(block=True)
+            plt.close()
         
-        pA_imp = implemented_function('pA_'+str(k),self.myFunMod2A(pA_interp))
-        #pB_imp = implemented_function('pB_'+str(k),self.myFunMod2B(pB_interp))
+        return pA_data
+        """
+    
+        pA_data = np.zeros((self.NB[k],self.NA[k]))
         
-        #self.gx_imp.append(implemented_function('gx_'+str(k),self.myFunMod(fnx)))
-        #pA_lam = lambdify([ta,tb],pA_imp)
-        #pB_lam = lambdify([tb,ta],pB_imp)
+        # no choice but to double loop because of interp2d.
+        for i in range(self.NA[k]):
+                
+            for j in range(self.NB[k]):
+                a, b = A_array[i], B_array[j]
+                
+                intA = np.exp(self.kappa*s)*lam_hetA(a-s,b-s)
+                #intA = np.exp(self.kappa*s)*pA_interp2(a-s,b-s)
+                
+                pA_data[j,i] = np.sum(intA)*ds
         
-        self.pA_data.append(pA_data)
-        #self.pB_data.append(pB_data)
         
-        self.pA_imp.append(pA_imp)
-        #self.pB_imp.append(pB_imp)
         
-        self.pA_callable.append(pA_interp)
-        #self.pB_callable.append(pB_interp)
+        
+        return pA_data
+        """
         
     def load_h_sym(self):
         # symbolic h terms
         
-        if self.recompute_h_sym or not(lib.files_exist(self.h_sym_fnames)):
+        self.hodd['sym'] = []
+        
+        if self.recompute_h_sym or not(lib.files_exist(self.hodd['sym_fnames'])):
             
             print('* Computing... H symbolic')
             #self.pA = Sum(eps**i_sym*Indexed('pA',i_sym),(i_sym,1,max_idx)).doit()
-            rule1 = {Indexed('zx',i):Indexed('zxA',i) for i in range(self.miter)}
-            rule2 = {Indexed('zy',i):Indexed('zyA',i) for i in range(self.miter)}
+            z_rule = {}
+            for key in self.var_names:
+                for i in range(self.miter):
+                    z_rule.update({Indexed('z'+key,i):Indexed('z'+key+'A',i)})
+
+            z_rule.update({self.psi:self.pA['expand']})
+            z = self.z['vec'].subs(z_rule)
             
-            z_rule = {**rule1,**rule2,**{'psi':self.pA}}
-            z = self.z_expansion.subs(z_rule)
+            collected = collect(expand(self.cA['vec'].dot(z)),self.eps)
             
-            
-            self.h_collected = sym.collect(sym.expand(self.cA.dot(z)),self.eps)
-            self.h_sym = []
+            self.h_collected = collect(expand(collected),self.eps)
+            #print('hcollected',self.h_collected)
             
             for i in range(self.miter):
                 collected = self.h_collected.coeff(self.eps,i)
                 #print(collected)
-                self.h_sym.append(collected)
-                dill.dump(self.h_sym[i],open(self.h_sym_fnames[i],'wb'),
+                self.hodd['sym'].append(collected)
+                dill.dump(self.hodd['sym'][i],
+                          open(self.hodd['sym_fnames'][i],'wb'),
                           recurse=True)
                 
         else:
-            self.h_sym = lib.load_dill(self.h_sym_fnames)
+            self.hodd['sym'] = lib.load_dill(self.hodd['sym_fnames'])
             
             
     def load_h(self):
         
+        self.hodd['lam'] = []
+        self.hodd['dat'] = []
+        
         #self.i_data, self.ix_imp, self.iy_imp = ([] for i in range(3))
         #self.ix_callable, self.iy_callable = ([] for i in range(2))
-        self.h_odd_data = []
-        self.h_lams = []
+
         
-        if self.recompute_h or not(lib.files_exist(self.h_odd_fnames)):
+
+        if self.recompute_h or not(lib.files_exist(self.hodd['dat_fnames'])):
             
             print('* Computing...',end=' ')
             rule = {**self.rule_p_AB,
@@ -1395,28 +1524,49 @@ class CGL(object):
             
             for i in range(self.miter):
                 
-                collected = self.h_sym[i].subs(rule)
+                collected = self.hodd['sym'][i].subs(rule)
+                
+                #print('i,col',i,collected)
                 
                 ta = self.thA
                 tb = self.thB
                 
                 h_lam = sym.lambdify([ta,tb],collected)
-                self.h_lams.append(h_lam)
+                self.hodd['lam'].append(h_lam)
                 
             
             for k in range(self.miter):
                 print('h_'+str(k),end=', ')
                 data = self.generate_h_odd(k)
-                self.h_odd_data.append(data)
-                np.savetxt(self.h_odd_fnames[k],data)
+                self.hodd['dat'].append(data)
+                np.savetxt(self.hodd['dat_fnames'][k],data)
             print()
             
             
         else:
             
             for k in range(self.miter):
-                self.h_odd_data.append(np.loadtxt(self.h_odd_fnames[k]))
+                self.hodd['dat'].append(np.loadtxt(self.hodd['dat_fnames'][k]))
     
+        """
+        i = 0
+        v = self.LC['dat_v']
+        w = self.LC['dat_w']
+        z0 = self.z['dat'][0][:,0]
+        
+        from numpy.fft import fft,ifft
+        
+        y = ifft(fft(v*z0)*fft(w[::-1]))
+        
+        print('h0',self.hodd['sym'][0])
+        #y = convolve1d(v*z0,w,mode='wrap')
+        print(y[::-1]-y)
+        fig = plt.figure()
+        ax = fig.add_subplot()
+        ax.plot(y[::-1]-y)
+        plt.show(block=True)
+        print('PLOT H')
+        """
     
     def generate_h_odd(self,k):
         """
@@ -1427,17 +1577,21 @@ class CGL(object):
         double counting boundaries in mod operator.
         """
         
-        h_mg = np.zeros((self.NB,self.NA))
+        h_mg = np.zeros((self.NB[k],self.NA[k]))
         
         
+        A_array,dxA = np.linspace(0,self.T,self.NA[k],retstep=True,
+                                  endpoint=True)
+        B_array,dxB = np.linspace(0,self.T,self.NB[k],retstep=True,
+                                  endpoint=True)
         
-        for j in range(self.NB):
-            t = self.A_array
-            eta = self.B_array[j]
+        for j in range(self.NB[k]):
+            t = A_array
+            eta = B_array[j]
             
-            h_mg[j,:] = self.h_lams[k](t,t+eta)
+            h_mg[j,:] = self.hodd['lam'][k](t,t+eta)
         
-        # for i in range(self.NA):
+        # for i in range(self.NA[k]):
         #     for j in range(self.NB):
         #         t = self.A_array[i]
         #         eta = self.B_array[j]
@@ -1445,15 +1599,23 @@ class CGL(object):
         #         h_mg[j,i] = self.h_lams[k](t,t+eta)
                 
         # sum along axis to get final form
-        h = np.sum(h_mg,axis=1)/(self.NA)
-        
+        h = np.sum(h_mg,axis=1)*dxA/self.T
+        if True:
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(h)
+            title = ('h non-odd '+str(k)
+                     +'NA='+str(self.NA[k])
+                     +', NB='+str(self.NB[k])
+                     +', Ns='+str(self.Ns[k]))
+            ax.set_title(title)
+            plt.show(block=True)
         
         #print(h)
         #hodd = h
         hodd = (h[::-1]-h)
         
         return hodd
-            
         
     def bispeu(self,fn,x,y):
         """
@@ -1462,7 +1624,7 @@ class CGL(object):
         """
         return si.dfitpack.bispeu(fn.tck[0], fn.tck[1], fn.tck[2], fn.tck[3], fn.tck[4], x, y)[0][0]
         
-    def dg(self,t,z,hetx,hety,order):
+    def dg(self,t,z,order,het_vec):
         """
         g functon rhs with ith het. term
         
@@ -1477,17 +1639,15 @@ class CGL(object):
         
         jac = self.jacLC(t)*(order > 0)
         
-        
-        
         hom = np.dot(jac-order*self.kappa*self.eye,z)
-        het = 0.5*np.array([hetx(t),hety(t)])
+        #het = 0.5*np.array([hetx(t),hety(t)])
         
         #if order == 1:
         #    print(t,jac,hom,het,self.jacLC(self.t))
         
-        return hom + het
+        return hom + het_vec(t)
     
-    def dz(self,t,z,hetx,hety,order):
+    def dz(self,t,z,order,het_vec):
         """
         g functon rhs with ith het. term
         
@@ -1500,13 +1660,13 @@ class CGL(object):
         """
         
         hom = -np.dot(self.jacLC(t).T+order*self.kappa*self.eye,z)
-        het = -np.array([hetx(t),hety(t)])
+        #het = -np.array([hetx(t),hety(t)])
         
-        out = hom + het
+        out = hom - het_vec(t)
         
         return out
     
-    def di(self,t,z,hetx,hety,order):
+    def di(self,t,z,order,het_vec):
         """
         g functon rhs with ith het. term
         
@@ -1521,14 +1681,105 @@ class CGL(object):
         
         
         hom = -np.dot(self.jacLC(t).T+self.kappa*(order-1)*self.eye,z)
-        het = -np.array([hetx(t),hety(t)])
+        #het = -np.array([hetx(t),hety(t)])
         
-        out = hom + het
+        out = hom - het_vec(t)
         
         #if order == 0 and int(t*self.TN) % 5 == 0:
         #    print(t,z,out,int(t*self.TN))
         
         return out
+    
+    
+    
+    def interp_lam(self,k,fn_dict,fn_type='z'):
+        """
+        it is too slow to call individual interpolated functions
+        in the symbolic heterogeneous terms.
+        since the heterogeneous terms only depend on t, just make
+        and interpolated version and use that instead so only 1 function
+        is called for the het. terms per iteration in numerical iteration.
+        """
+        # lambdify heterogeneous terms for use in integration
+        # create lambdified heterogeneous term and interpolate
+        # load kth expansion of g for k >= 1
+        
+        # z and i use the same heterogeneous terms
+        # so they are indistinguishable in this function.
+        #print('self lc',self.LC)
+        if fn_type == 'z' or fn_type == 'i':
+            fn_type = 'z'
+        
+        rule = {}
+        for key in self.var_names:
+            tmp = {sym.Indexed(fn_type+key,i):fn_dict['imp_'+key][i](self.t)
+                   for i in range(k)}
+            #print(k,key,len(self.z['imp_'+key]))
+            rule.update(tmp)
+        
+        rule = {**rule,**self.rule_LC,**self.rule_par}
+        if fn_type == 'z':
+            rule.update({**self.rule_g})
+        
+        #het_lams = {}
+        het_imp = sym.zeros(1,self.dim)
+        for i,key in enumerate(self.var_names):
+            sym_fn = fn_dict['sym_'+key][k].subs(rule)
+            lam = lambdify(self.t,sym_fn)
+            #lam = lambdify(self.t,fn_dict['sym_'+key][k].subs(rule))
+            
+            
+            # evaluate
+            if fn_type == 'g' and (k == 0 or k == 1):
+                y = np.zeros(self.TN)
+            elif fn_type == 'z' and k == 0:
+                y = np.zeros(self.TN)
+            elif fn_type == 'i' and k == 0:
+                y = np.zeros(self.TN)
+            else:
+                y = lam(self.tLC)
+                
+                
+            # save as implemented fn
+            interp = interpb(self.LC['t'],y,self.T)
+            imp = imp_fn(key,self.fmod(interp))
+            het_imp[i] = imp(self.t)
+            
+            
+        het_vec = lambdify(self.t,het_imp)
+        
+        #print('print het vec',het_vec(1))
+        
+        if False and k > 0:
+            fig, axs = plt.subplots(nrows=self.dim,ncols=1)
+            for i,key in enumerate(self.var_names):
+                print('k',k,key)                
+                axs[i].plot(self.tLC*2,het_vec(self.tLC*2)[i])
+            
+            axs[0].set_title('lam dict')
+            plt.tight_layout()
+            plt.show(block=True)
+            
+        return het_vec
+    
+    
+    def fmod(self,fn):
+        """
+        input function-like. usually interp1d object
+        
+        needed to keep lambda input variable unique to fn.
+        
+        otherwise lambda will use the same input variable for 
+        all lambda functions.
+        """
+        return lambda x=self.t: fn(np.mod(x,self.T))
+    
+    
+    def fLam2(self,fn):
+        """
+        interp2db object
+        """
+        return lambda xA=self.thA,xB=self.thB: fn(xA,xB)
     
     
     def myFunMod(self,fn):
@@ -1550,7 +1801,8 @@ class CGL(object):
         
         """
         
-        return lambda xA=self.thA,xB=self.thB: fn(np.mod(xA,self.T),np.mod(xB,self.T))
+        return lambda xA=self.thA,xB=self.thB: fn(np.mod(xA,self.T),
+                                                  np.mod(xB,self.T))
     
     
     def myFunMod2A(self,fn):
@@ -1586,7 +1838,7 @@ class CGL(object):
 def main():
     
     # for NIC, 3rd derivatives go away, so we only need trunc_gh=3.
-    a = CGL(recompute_monodromy=True,
+    a = CGL(recompute_monodromy=False,
             recompute_g_sym=False,
             recompute_g=False,
             recompute_het_sym=False,
@@ -1597,10 +1849,11 @@ def main():
             recompute_p=True,
             recompute_h_sym=False,
             recompute_h=True,
-            trunc_order=4,
-            trunc_derviative=2,
+            trunc_order=5,
+            trunc_derviative=5,
             d_val=1,
             q_val=1,
+            TN=2001,
             load_all=True)
     
     """
@@ -1612,16 +1865,13 @@ def main():
     
     for i in range(a.miter):
         lib.plot(a,'i'+str(i))
-    """
     
+    """
     for i in range(a.miter):
         lib.plot(a,'hodd'+str(i))
-        
-    """
-    for i in range(a.miter):
-        lib.plot(a,'pA'+str(i))
-    plt.show(block=True)
     
+    
+    """
     lib.plot(a,'surface_z')
     lib.plot(a,'surface_i')
     """
@@ -1655,7 +1905,7 @@ def main():
     
     
 if __name__ == "__main__":
-    
+    __spec__  = None
     import cProfile
     import re
     cProfile.runctx('main()',globals(),locals(),'profile.pstats')
