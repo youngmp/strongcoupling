@@ -16,13 +16,7 @@ this file is also practice for creating a more general class for any RHS.
 
 coupling functions for thalamic neurons from RTSA Ermentrout, Park, Wilson 2019
 
-TODO (8/26/2020): gsym is now much faster using multinomial=True. However
-the heterogeneous terms are not being called correctly. 6th order
-terms are appearing in the het call for 6th order. check, for example,
-that 5th order terms call at most 4th order, 4th order call at most 3rd order
-and so on.
-
-also consider uing the cse method to reduce the function calls in the 
+TODO (9/9/2020): consider uing the cse method to reduce the function calls in the 
 H function calculations. or use matrix substitution. or both
 
 """
@@ -147,14 +141,14 @@ class Thalamic(object):
         self.rel_tol = 1e-9
         
         # for coupling computation. ctrl+F to see usage.
-        self.NA = np.array([6000,6000,6000,6000,6000,6000,6000,6000])
+        self.NA = np.array([5000,5000,5000,5000,5000,5000,5000,5000])
         self.NB = self.NA # do not change!!!!
         self.Ns = self.NA # do not change!!!!
         self.smax = np.array([1,1,1,1,1,1,1,1])
         self.p_iter = np.array([25,25,25,25,25,25,25,25])
         
-        self.hNA = 6000
-        self.hNB = 6000
+        self.hNA = 5000
+        self.hNB = 5000
         
         # parameters
         self.c = symbols('c')
@@ -896,7 +890,7 @@ class Thalamic(object):
             print(str(i))
             fname = self.g['dat_fnames'][i]
             #print('i,fname',i,fname)
-            file_does_not_exist = not(os.path.exists(fname))
+            file_does_not_exist = not(os.path.isfile(fname))
             if self.recompute_g or file_does_not_exist:
                 
                 het_vec = self.interp_lam(i,self.g,fn_type='g')
@@ -1140,7 +1134,7 @@ class Thalamic(object):
         for i in range(self.miter):
             print(str(i))
             fname = self.z['dat_fnames'][i]
-            file_does_not_exist = not(os.path.exists(fname))
+            file_does_not_exist = not(os.path.isfile(fname))
             #print('z fname',fname)
             if self.recompute_z or file_does_not_exist:
                 
@@ -1252,7 +1246,7 @@ class Thalamic(object):
         for i in range(self.miter):
             print(str(i))
             fname = self.i['dat_fnames'][i]
-            file_does_not_exist = not(os.path.exists(fname))
+            file_does_not_exist = not(os.path.isfile(fname))
             
             if self.recompute_i or file_does_not_exist:
                 
@@ -1704,12 +1698,25 @@ class Thalamic(object):
         # this lambidfy calls symbolic functions. slow.
         # convert lamdify to data and call linear interpolation on that.
         # then function call is same speed independent of order.
-        lam_hetA = lambdify([ta,tb],ph_impA,modules='numpy')
-        lam_hetA_old = lam_hetA
+        #lam_hetA = lambdify([ta,tb],ph_impA,modules='numpy')
+        #lam_hetA_old = lam_hetA
+        
+        # https://stackoverflow.com/questions/30738840/...
+        # best-practice-for-using-common-subexpression-elimination...
+        # -with-lambdify-in-sympy
+        repl, redu = sym.cse(ph_impA)
+        
+        funs = []
+        syms = [ta,tb]
+        for i, v in enumerate(repl):
+            funs.append(lambdify(syms,v[1],modules='numpy'))
+            syms.append(v[0])
+        
+        glam = lambdify(syms,redu[0],modules='numpy')
         
         # maximize accuracy of interpolation
-        NA2 = self.TN
-        NB2 = NA2+1
+        #NA2 = self.TN
+        #NB2 = NA2+1
         #lam_hetA_data = np.zeros((NB2,NA2))
         lam_hetA_data = np.zeros((self.NB[k],self.NA[k]))
         
@@ -1719,13 +1726,20 @@ class Thalamic(object):
         for i in range(self.NA[k]):
             ta2 = A_array2[i]*np.ones_like(B_array2)
             tb2 = B_array2
-            lam_hetA_data[:,i] = lam_hetA(ta2,tb2)
+            
+            xs = [ta2,tb2]
+            
+            for f in funs:
+                xs.append(f(*xs))
+        
+            #lam_hetA_data[:,i] = lam_hetA(ta2,tb2)
+            lam_hetA_data[:,i] = glam(*xs)
         
         het_interp = interp2d(A_array2,B_array2,lam_hetA_data,kind='quintic')
         
         #pA_imp = implemented_function('temp',self.myFunMod2A(het_interp))
         
-        pA_interp2 = interp2db(het_interp,self.T)
+        #pA_interp2 = interp2db(het_interp,self.T)
         #pA_interp2 = lam_hetA
         #lam_hetA = lambdify([ta,tb],pA_imp(ta,tb))
         
@@ -1999,78 +2013,64 @@ class Thalamic(object):
             
             #print('collected h',sym.simplify(collected))
             
-            
-            
             ta = self.thA
             tb = self.thB
             
-            h_lam = lambdify([ta,tb],self.hodd['sym'][i].subs(rule),
-                             modules='numpy')
+            #h_lam = lambdify([ta,tb],self.hodd['sym'][i].subs(rule),
+            #                 modules='numpy')
             #h_lam = ufuncify([ta,tb],collected)
             
-            """
+            # change lam into data set and interp2d call for speed.
             NA = self.NA[i]
             NB = self.NB[i]
             
-            # change lam into data set and interp2d call for speed.
+            # https://stackoverflow.com/questions/30738840/...
+            # best-practice-for-using-common-subexpression-elimination...
+            # -with-lambdify-in-sympy
+            repl, redu = sym.cse(self.hodd['sym'][i].subs(rule))
+            
+            funs = []
+            syms = [ta,tb]
+            for ii, v in enumerate(repl):
+                funs.append(lambdify(syms,v[1],modules='numpy'))
+                syms.append(v[0])
+            
+            glam = lambdify(syms,redu[0],modules='numpy')
+            
+            #print('assignments',assignments)
+            #print('fn',fn)
+            #print(fn[0].subs(assignments[::-1]))
+            
             A_array,dxA = np.linspace(0,self.T,NA,retstep=True,endpoint=True)
             B_array,dxB = np.linspace(0,self.T,NB,retstep=True,endpoint=True)
             
             A_arr = A_array
             B_arr = B_array
             
-            # [begin debug] check time elapsed for various function calls
-            if i == 0:
-                fn_names = [('zvA',0)]
-                
-            elif i == 1:
-                fn_names = [('pA',1),('wA',1),('zvA',0)]
-            elif i == 2:
-                    
-                fn_names = [('pA',1),('pA',2),('wA',1),('wA',2),('zvA',0)]
-                
             ta2 = A_arr[0]*np.ones_like(B_arr)
             tb2 = B_arr
-            
-            
-            
-            for fn_name,idx in fn_names:
-                #print('fn name,idx',fn_name,idx)
-                start = time.time()
-                fn2 = sym.Indexed(fn_name,idx).subs({sym.Indexed(fn_name,idx):
-                                                    sym.Matrix([[1,2,3,4,5]])})
-                print(fn2)
-                
-                fn = sym.Indexed(fn_name,idx).subs(rule)
-                
-                #lam2 = sym.lambdify([ta,tb],self.pA['imp'][i](ta,tb))
-
-                lam = sym.lambdify([ta,tb],fn,modules='numpy')
-                #lam = sym.lambidfy-numpy([ta,tb],collected,
-                #               backend='f2py')
-                lam(ta2,tb2)
-                end = time.time()
-                print('time elapsed '+fn_name+str(idx)+' '+str(end-start))
-                
-            
-            # [end debug] check time elapsed for various function calls
             
             lam_h_data = np.zeros((NB,NA))
             
             for j in range(NA):
-                
-                # get all arrays
-                
-                #print('h','i',i,'iter',j)
+                if j % int(NA/5) == 0:
+                    print('hsym',i,j)
+
                 ta2 = A_arr[j]*np.ones_like(B_arr)
                 tb2 = B_arr
                 
-                lam_h_data[:,j] = h_lam(ta2,tb2)
+                xs = [ta2,tb2]
+                
+                for f in funs:
+                    xs.append(f(*xs))
+                    
+                
+                lam_h_data[:,j] = glam(*xs)
             
             h_interp = interp2d(A_arr,B_arr,lam_h_data,kind='quintic')
             h_interp2 = interp2db(h_interp,self.T)
-            """
-            self.hodd['lam'].append(h_lam)
+            
+            self.hodd['lam'].append(h_interp2)
             
             
     def load_h(self):
@@ -2081,7 +2081,7 @@ class Thalamic(object):
         
         for i in range(self.miter):
             fname = self.hodd['dat_fnames'][i]
-            file_does_not_exist = not(os.path.exists(fname))
+            file_does_not_exist = not(os.path.isfile(fname))
             if self.recompute_h or file_does_not_exist:
                 
                 print('* Computing H'+str(i)+'...')
@@ -2399,7 +2399,7 @@ def main():
                  recompute_p_sym=False,
                  recompute_p=False,
                  recompute_h_sym=False,
-                 recompute_h=False,
+                 recompute_h=True,
                  trunc_order=7,
                  TN=20000,
                  ib_val=3.5,

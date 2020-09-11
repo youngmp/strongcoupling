@@ -28,14 +28,14 @@ def main():
                'trunc_derviative':2,
                'd_val':1,
                'q_val':1,
-               'load_all':False}
+               'load_all':True}
     
     d_center = 1
     a = CGL(**options)
     
     options['load_all'] = False
     
-    d_vals = np.linspace(d_center-1,d_center+1,100)[::1]
+    d_vals = np.linspace(d_center-1,d_center+1,1000)[::1]
     dd = (d_vals[1] - d_vals[0])
     #d_vals_original = np.linspace(d_center-.5,d_center+.5,50)[:3]
     #dx = d_vals_original[1]-d_vals_original[0]

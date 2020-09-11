@@ -42,7 +42,7 @@ import scipy as sp
 import sympy as sym
 import matplotlib.pyplot as plt
 
-from numba import njit
+#from numba import njit
 from scipy.fftpack import fft, ifft
 from operator import methodcaller
 from mpl_toolkits.mplot3d import Axes3D
@@ -113,17 +113,20 @@ class CGL(object):
         self.eye = np.identity(self.dim)
         self.psi, self.eps, self.kap_sym = sym.symbols('psi eps kap_sym')
         
-        self.rtol = 1e-6
+        self.rtol = 1e-8
         self.atol = 1e-8
         self.method = 'LSODA'
         self.rel_tol = 1e-6
         
         # for coupling computation. ctrl+F to see usage.
-        self.NA = np.array([70,70,70,70,70,70])
+        self.NA = np.zeros(self.miter,dtype=int)+70
         self.NB = self.NA + 1
-        self.Ns = np.array([50,50,50,50,50,50])
-        self.smax = np.array([1,1,1,1,1,1])
-        self.p_iter = np.array([5,5,5,5,5,5])
+        self.Ns = np.zeros(self.miter,dtype=int)+50
+        self.smax = np.zeros(self.miter,dtype=int)+1
+        self.p_iter = np.zeros(self.miter,dtype=int)+5
+
+        self.hNA = self.NA[0]
+        self.hNB = self.NB[0]
         
         # parameters
         self.q, self.d = symbols('q d')
@@ -227,7 +230,7 @@ class CGL(object):
     
         
         slib.generate_expansions(self)
-        slib.generate_coupling_expansions(self)
+        slib.load_coupling_expansions(self)
         slib.load_jac_sym(self)
         
         # Run method
@@ -413,7 +416,7 @@ class CGL(object):
         self.hx = 0
         self.hy = 0
         
-        for i in range(2,self.trunc_derivative+1):
+        for i in range(2,self.miter):
             # all x1,x2 are evaluated on limit cycle x=cos(t), y=sin(t)
             p = lib.kProd(i,self.dx_vec)
             d1 = lib.vec(lib.df(self.CGL_sym[0],self.x_vec,i))
@@ -450,12 +453,13 @@ class CGL(object):
             print('g_'+str(i),end=', ')
             fname = self.g['dat_fnames'][i]
             #print('i,fname',i,fname)
-            file_does_not_exist = not(os.path.exists(fname))
+            file_does_not_exist = not(os.path.isfile(fname))
+
             if self.recompute_g or file_does_not_exist:
-                
-                het_vec = self.interp_lam(i,self.g,fn_type='g')
-                
+                #print('g no exist',fname)
+                het_vec = self.interp_lam(i,self.g,fn_type='g')                
                 data = self.generate_g(i,het_vec)
+                
                 np.savetxt(self.g['dat_fnames'][i],data)
                 
             else:
@@ -483,6 +487,8 @@ class CGL(object):
             for j,key in enumerate(self.var_names):
                 #print(len(self.tLC),len(data[:,j]))
                 fn_temp = interpb(self.tLC,data[:,j],self.T)
+                #print('fn_temp',len(self.tLC),len(data[:,j]))
+                #print(fname)
                 imp_temp = imp_fn('g'+key+'_'+str(i),self.fmod(fn_temp))
                 self.g['imp_'+key].append(imp_temp)
                 
@@ -539,7 +545,7 @@ class CGL(object):
         else:
             eps = 1e-2
             backwards = True
-            rel_tol = 1e-9
+            rel_tol = 1e-8
             alpha = 1
             
             init = lib.run_newton2(self,self.dg,init,k,het_vec,
@@ -555,13 +561,15 @@ class CGL(object):
             
         else:
             tLC = self.tLC
+
             
         sol = solve_ivp(self.dg,[0,tLC[-1]],
                         init,args=(k,het_vec),
                         t_eval=tLC,method=self.method,
                         dense_output=True,
                         rtol=self.rtol,atol=self.atol)
-        
+
+        print('computed g?')
         if backwards:
             gu = sol.y.T[::-1,:]
             
@@ -699,7 +707,7 @@ class CGL(object):
         #self.ax = Matrix([[0],[0]])
         #self.ay = Matrix([[0],[0]])
         
-        for i in range(1,self.trunc_derivative+1):
+        for i in range(1,self.miter):
             p1 = lib.kProd(i,self.dx_vec)
             p2 = kp(p1,sym.eye(self.dim))
 
@@ -760,7 +768,7 @@ class CGL(object):
         for i in range(self.miter):
             print('z_'+str(i),end=', ')
             fname = self.z['dat_fnames'][i]
-            file_does_not_exist = not(os.path.exists(fname))
+            file_does_not_exist = not(os.path.isfile(fname))
             #print('z fname',fname)
             if self.recompute_z or file_does_not_exist:
                 
@@ -865,7 +873,7 @@ class CGL(object):
         for i in range(self.miter):
             print('i_'+str(i),end=', ')
             fname = self.i['dat_fnames'][i]
-            file_does_not_exist = not(os.path.exists(fname))
+            file_does_not_exist = not(os.path.isfile(fname))
             
             if self.recompute_i or file_does_not_exist:
                 
@@ -952,7 +960,7 @@ class CGL(object):
                 
                 
             init = lib.run_newton2(self,self.di,init,k,het_lams,
-                                   max_iter=100,rel_tol=1e-9,
+                                   max_iter=100,rel_tol=1e-8,
                                    rel_err=5,eps=eps,
                                    backwards=True,exception=exception)
         #t = -1.06881
@@ -1435,7 +1443,7 @@ class CGL(object):
         pA_data = np.reshape(pA_data,(r,c))
         
         
-        if True:
+        if False:
             fig = plt.figure()
             ax = fig.add_subplot(111)
             
@@ -1726,6 +1734,7 @@ class CGL(object):
         for i,key in enumerate(self.var_names):
             sym_fn = fn_dict['sym_'+key][k].subs(rule)
             lam = lambdify(self.t,sym_fn)
+            #print('lam',lam(10))
             #lam = lambdify(self.t,fn_dict['sym_'+key][k].subs(rule))
             
             
@@ -1737,6 +1746,7 @@ class CGL(object):
             elif fn_type == 'i' and k == 0:
                 y = np.zeros(self.TN)
             else:
+                #print('lam',k,len(self.tLC),lam(1))
                 y = lam(self.tLC)
                 
                 

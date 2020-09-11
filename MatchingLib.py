@@ -441,7 +441,7 @@ def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
             
             #print(rel_err)
             
-            if True:
+            if False:
                 fig, axs = plt.subplots(nrows=obj.dim,ncols=1)
                     
                 for i,ax in enumerate(axs):
