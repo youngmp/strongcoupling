@@ -1596,7 +1596,7 @@ class Thalamic(object):
         
         
         #print('starting new pool')
-        self.pool = _ProcessPool(processes=8)
+        self.pool = _ProcessPool(processes=6)
         
         for i,fname in enumerate(self.pA['dat_fnames']):
             #print('pA datfname',fname,os.path.isfile(fname))
@@ -1671,7 +1671,125 @@ class Thalamic(object):
         
         self.rule_p_AB = {**rule_pA,**rule_pB}
         
+        
     def generate_p(self,k):
+        #import scipy as sp
+        import numpy as np
+        
+        kappa = self.kappa
+        
+        ta = self.thA
+        tb = self.thB
+        
+        NA = self.NA
+        NB = self.NB
+        dxA_noend = self.dxA_noend
+        T = self.T
+        
+        if k == 0:
+            #pA0 is 0 (no forcing function)
+            return np.zeros((self.NB,self.NA))
+        
+        # put these implemented functions into the expansion
+        ruleA = {sym.Indexed('pA',i):
+                 self.pA['imp'][i](ta,tb) for i in range(k)}
+        ruleB = {sym.Indexed('pB',i):
+                 self.pA['imp'][i](tb,ta) for i in range(k)}
+        
+        
+        rule = {**ruleA, **ruleB,**self.rule_g_AB,
+                **self.rule_i_AB,**self.rule_LC_AB,
+                **self.rule_par}
+        
+        ph_impA = self.pA['sym'][k].subs(rule)
+        repl, redu = sym.cse(ph_impA)
+        
+        funs = []
+        syms = [ta,tb]
+        for i, v in enumerate(repl):
+            funs.append(lambdify(syms,v[1],modules='numpy'))
+            syms.append(v[0])
+        
+        glam = lambdify(syms,redu[0],modules='numpy')
+        
+        A_array2 = self.Aarr_noend
+        
+        # pg 184 brandeis notebook
+        # u \in [-\infty 0] and (0,theta_1)
+        
+        exp = np.exp        
+        p_iter = self.p_iter
+        u = np.arange(0,-T*p_iter,dxA_noend)
+        exponential = exp(-i*kappa)
+        
+        # integral 1
+        i1 = np.zeros(NA)
+        
+        for i in range(NA):
+            phi = A_array2[i]
+            xs = [u,phi+u]
+            
+            for f in funs:
+                xs.append(f(*xs))
+            
+            periodic = glam(*xs)
+            
+            i1[i] = np.sum(exponential*periodic)*dxA_noend
+        
+        # integral 2
+        i2 = np.zeros(NA,NA)
+        
+        u2 = A_array2
+        for i in range(NA):
+            phi = A_array2[i]
+            xs = [u2,phi+u2]
+            
+            for f in funs:
+                xs.append(f(*xs))
+            
+            periodic = glam(*xs)
+            i2[:,i] = np.cumsum(exp(-kappa*u2)*periodic)*dxA_noend
+            
+        A_mg, B_mg = np.meshgrid(A_array2,A_array2)    
+        
+        a_i = np.arange(NA,dtype=int)
+        A_mg_idxs, B_mg_idxs = np.meshgrid(a_i,a_i)
+        
+        r,c = np.shape(A_mg)
+        a = np.reshape(A_mg,(r*c,))
+        idx = np.arange(len(a))
+        
+        a_mg_idxs = np.reshape(A_mg_idxs,(r*c,))
+        b_mg_idxs = np.reshape(B_mg_idxs,(r*c,))
+        
+        pA_data = np.zeros((r,c))
+        pA_data = np.reshape(pA_data,(r*c,))
+        
+        def return_integral(i):
+            """
+            return time integral at position a,b
+            """
+            diff_idx = b_mg_idxs[i] - a_mg_idxs[i]
+            phi_idx = np.abs(diff_idx)
+            
+            int1 = i1[phi_idx]
+            int2 = i2[a_mg_idxs[i],phi_idx]
+            
+            return exp(kappa*a_mg_idxs[i])*(int1+int2), i
+        
+        p = self.pool
+        
+        for x in tqdm.tqdm(p.imap(return_integral,idx,chunksize=1000),
+                           total=len(a)):
+            integral, idx = x
+            pA_data[idx] = integral
+            
+        pA_data = np.reshape(pA_data,(r,c))
+        
+        return pA_data
+    
+        
+    def generate_p_old(self,k):
         
         import scipy as sp
         import numpy as np
@@ -1684,7 +1802,6 @@ class Thalamic(object):
         dxA_noend = self.dxA_noend
         T = self.T
         
-        grub
         if k == 0:
             #pA0 is 0 (no forcing function)
             return np.zeros((self.NB,self.NA))
@@ -1873,8 +1990,6 @@ class Thalamic(object):
     def load_h(self):
         
         self.hodd['dat'] = []
-        
-        #self.pool = _ProcessPool(processes=11)
         
         for i in range(self.miter):
             fname = self.hodd['dat_fnames'][i]
@@ -2215,10 +2330,10 @@ def main():
                  recompute_h_sym=False,
                  recompute_h=True,
                  trunc_order=9,
-                 NA=10000,
-                 NB=10000,
+                 NA=100,
+                 NB=100,
                  p_iter=10,
-                 TN=100000,
+                 TN=20000,
                  ib_val=3.5,
                  load_all=True)
     

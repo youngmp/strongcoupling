@@ -701,11 +701,9 @@ def generate_fnames(obj,model_pars=''):
     
     obj.pA['dat_fnames'] = [(obj.dir+'pA_dat_'+str(i)+model_pars
                             +c_pars
-                            +'_NA='+str(obj.NA[i])
-                            +'_NB='+str(obj.NB[i])
-                            +'_Ns='+str(obj.Ns[i])
-                            +'_smax='+str(obj.smax[i])
-                            +'_piter='+str(obj.p_iter[i])
+                            +'_NA='+str(obj.NA)
+                            +'_NB='+str(obj.NB)
+                            +'_piter='+str(obj.p_iter)
                             +'.txt')
                             for i in range(obj.miter)]
 
@@ -715,11 +713,9 @@ def generate_fnames(obj,model_pars=''):
     obj.hodd['dat_fnames'] = [(obj.dir+'h_dat_'+str(i)
                                +model_pars
                                +c_pars
-                               +'_NA='+str(obj.hNA)
-                               +'_NB='+str(obj.hNB)
-                               +'_Ns='+str(obj.Ns[i])
-                               +'_smax='+str(obj.smax[i])
-                               +'_piter='+str(obj.p_iter[i])
+                               +'_NA='+str(obj.NA)
+                               +'_NB='+str(obj.NB)
+                               +'_piter='+str(obj.p_iter)
                                +'.txt')
                               for i in range(obj.miter)]
     
