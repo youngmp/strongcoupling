@@ -3,3 +3,5 @@
 cgl_dat/cB.d
 *.d
 *.txt
+*.png
+*.py~

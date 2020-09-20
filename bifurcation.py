@@ -3,6 +3,9 @@
 Created on Sun Jun 28 22:25:22 2020
 
 crappy bifurcation diagram
+
+check if diagram looks better or same with and without endpoints in 
+pA calculation
 """
 
 from CGL import CGL
@@ -24,10 +27,11 @@ def main():
                'recompute_p':False,
                'recompute_h_sym':False,
                'recompute_h':False,
-               'trunc_order':7,
+               'trunc_order':9,
                'trunc_derviative':2,
                'd_val':1,
                'q_val':1,
+               'TN':2001,
                'load_all':True}
     
     d_center = 1
@@ -35,7 +39,7 @@ def main():
     
     options['load_all'] = False
     
-    d_vals = np.linspace(d_center-1,d_center+1,1000)[::1]
+    d_vals = np.linspace(d_center-1,d_center+1,200)[::1]
     dd = (d_vals[1] - d_vals[0])
     #d_vals_original = np.linspace(d_center-.5,d_center+.5,50)[:3]
     #dx = d_vals_original[1]-d_vals_original[0]
@@ -69,7 +73,9 @@ def main():
         
         a.__init__(**options)
         
+        a.load_p_sym()
         a.load_p()
+        a.load_h_sym()
         a.load_h()
         #print(a.h_odd_data)
         
@@ -77,14 +83,15 @@ def main():
             
             
             h = 0
-            for i in range(8):
-                hterm = a.h_odd_data[i]
+            for i in range(10):
+                hterm = a.hodd['dat'][i]
                 
                 if i == 2:
                     hterm /= 1
                 h += ve**(i+1)*hterm
             
             # save specific h functions
+            """
             if (d == d_vals[20] and ve == ve_vals[10]):
                 
                 ax2.plot([0,2*np.pi],[0,0],color='gray')
@@ -119,6 +126,7 @@ def main():
                 #plt.tight_layout()
                 #plt.savefig('h_d='+str(d)+'.pdf')
                 #plt.close()
+            """
             #ax.set
             
             # get zeros
@@ -203,7 +211,7 @@ def main():
     
     ax1.plot(d_plots[q1_condition][sorted_idx1],
             eps_plots[q1_condition][sorted_idx1],
-            color=color_8th,label='8th Order',lw=lw,alpha=alpha)
+            color=color_8th,label='9th Order',lw=lw,alpha=alpha)
     
     ax1.plot(d_plots[q2_condition][sorted_idx2],
             eps_plots[q2_condition][sorted_idx2],
@@ -275,4 +283,6 @@ def main():
     
     
 if __name__ == '__main__':
+    
+    __spec__ = None
     main()

@@ -119,15 +119,12 @@ class CGL(object):
         self.rel_tol = 1e-6
         
         # for coupling computation. ctrl+F to see usage.
-        self.NA = np.zeros(self.miter,dtype=int)+70
+        self.NA = 200
         self.NB = self.NA + 1
-        self.Ns = np.zeros(self.miter,dtype=int)+50
-        self.smax = np.zeros(self.miter,dtype=int)+1
-        self.p_iter = np.zeros(self.miter,dtype=int)+5
+        self.Ns = self.NA
+        self.smax = 1
+        self.p_iter = 5
 
-        self.hNA = self.NA[0]
-        self.hNB = self.NB[0]
-        
         # parameters
         self.q, self.d = symbols('q d')
         
@@ -196,7 +193,8 @@ class CGL(object):
         if (not os.path.exists(self.dir)):
             os.makedirs(self.dir)
         
-        lib.generate_fnames(self)
+        #print('generating fnames',self.d_val)
+        lib.generate_fnames(self,coupling_pars='_d='+str(self.d_val))
         
         self.rhs_sym = self.rhs(0,self.vars,option='sym')
         
@@ -221,8 +219,6 @@ class CGL(object):
         self.LC['imp_y'] = sym.sin(self.q*self.t).subs(self.rule_par)
         self.LC['lam_y'] = lambdify(self.t,
                                     self.LC['imp_y'].subs(self.rule_par))
-        
-        print(self.LC['lam_y'](0.5))
         
         self.rule_LC = {}
         for i,key in enumerate(self.var_names):
@@ -344,7 +340,7 @@ class CGL(object):
         # get smallest eigenvalue and associated eigenvector
         self.min_lam_idx = np.argmin(self.eigenvalues)
         self.lam = self.eigenvalues[self.min_lam_idx]  # floquet mult.
-        self.kappa = np.log(self.lam)/self.T  # floquet exponent
+        self.kap_val = np.log(self.lam)/self.T  # floquet exponent
         
         self.g1_init = self.eigenvectors[:,self.min_lam_idx]
         self.z0_init = np.linalg.inv(self.eigenvectors)[1,:]
@@ -357,7 +353,7 @@ class CGL(object):
         #print(self.z0_init,self.i0_init)
         
         #print('Floquet Multiplier',self.lam)
-        print('Floquet Exponent kapa =',self.kappa)
+        print('Floquet Exponent kapa =',self.kap_val)
         
     def load_g_sym(self):
         # load het. functions h if they exist. otherwise generate.
@@ -1008,10 +1004,10 @@ class CGL(object):
             i1 = iu[0,:]
             
             ijg = np.dot(i0,np.dot(J,g1))
-            be = (self.kappa - ijg - np.dot(i1,F))/(np.dot(z0,F))
+            be = (self.kap_val - ijg - np.dot(i1,F))/(np.dot(z0,F))
             
             #print('actual',np.dot(F,i1))
-            #print('expect',np.dot(i0,np.dot(self.kappa*self.eye-J,g1)))
+            #print('expect',np.dot(i0,np.dot(self.kap_val*self.eye-J,g1)))
             #print('canchg',z0)
             #print('amtchg',np.dot(F,z0))
             #print('mymult',be)
@@ -1225,12 +1221,13 @@ class CGL(object):
         #if self.recompute_p or not(lib.files_exist(self.pA_fnames,self.pB_fnames)):
         
         print('* Computing...',end=' ')
-        self.pool = _ProcessPool(processes=10)
+        self.pool = _ProcessPool(processes=4)
         
+        #print('self.pA[datfnames]',self.pA['dat_fnames'])
         for i,fname in enumerate(self.pA['dat_fnames']):
-            A_array,dxA = np.linspace(0,self.T,self.NA[i],retstep=True,
+            A_array,dxA = np.linspace(0,self.T,self.NA,retstep=True,
                                       endpoint=True)
-            B_array,dxB = np.linspace(0,self.T,self.NB[i],retstep=True,
+            B_array,dxB = np.linspace(0,self.T,self.NB,retstep=True,
                                       endpoint=True)
             
             
@@ -1238,7 +1235,8 @@ class CGL(object):
             if self.recompute_p or not(os.path.isfile(fname)):
                 
                 pA_data = self.generate_p(i,A_array,B_array)
-                np.savetxt(self.pA['dat_fnames'][i],pA_data)
+                #print('fname',fname)
+                np.savetxt(fname,pA_data)
                 
             else:
                 pA_data = np.loadtxt(fname)
@@ -1287,7 +1285,7 @@ class CGL(object):
         
         if k == 0:
             #pA0 is 0 (no forcing function)
-            return np.zeros((self.NB[k],self.NA[k]))
+            return np.zeros((self.NB,self.NA))
         
         # put these implemented functions into the expansion
         ruleA = {sym.Indexed('pA',i):
@@ -1306,16 +1304,29 @@ class CGL(object):
         #print('k, self.pA[sym][k]:',k,self.pA['sym'][k])
         ph_impA = self.pA['sym'][k].subs(rule)
         
+        # https://stackoverflow.com/questions/30738840/...
+        # best-practice-for-using-common-subexpression-elimination...
+        # -with-lambdify-in-sympy
+        repl, redu = sym.cse(ph_impA)
+        
+        funs = []
+        syms = [ta,tb]
+        for i, v in enumerate(repl):
+            funs.append(lambdify(syms,v[1],modules='numpy'))
+            syms.append(v[0])
+        
+        glam = lambdify(syms,redu[0],modules='numpy')
+        
         # this lambidfy calls symbolic functions. slow.
         # convert lamdify to data and call linear interpolation on that.
         # then function call is same speed independent of order.
-        lam_hetA = lambdify([ta,tb],ph_impA)
-        lam_hetA_old = lam_hetA
+        #lam_hetA = lambdify([ta,tb],ph_impA)
+        #lam_hetA_old = lam_hetA
         
         
         # maximize accuracy of interpolation
-        NA2 = self.TN
-        NB2 = NA2+1
+        NA2 = self.NA
+        NB2 = self.NB
         lam_hetA_data = np.zeros((NB2,NA2))
         
         A_array2 = np.linspace(0,self.T,NA2,endpoint=True)
@@ -1343,7 +1354,14 @@ class CGL(object):
             
             ta2 = A_array2[i]*np.ones_like(B_array2)
             tb2 = B_array2
-            lam_hetA_data[:,i] = lam_hetA(ta2,tb2)
+            
+            xs = [ta2,tb2]
+            
+            for f in funs:
+                xs.append(f(*xs))
+            
+            #lam_hetA_data[:,i] = lam_hetA(ta2,tb2)
+            lam_hetA_data[:,i] = glam(*xs)
             
         
         het_interp = interp2d(A_array2,B_array2,
@@ -1360,7 +1378,7 @@ class CGL(object):
         
         # parallelize
         #s = copy.deepcopy(self.interval)
-        kappa = self.kappa
+        kappa = self.kap_val
        
         r,c = np.shape(A_mg)
         a = np.reshape(A_mg,(r*c,))
@@ -1372,12 +1390,12 @@ class CGL(object):
         
         #i = 10
         T = self.T
-        smax = self.smax[k]
-        Ns = self.Ns[k]
-        p_iter = self.p_iter[k]
+        #smax = self.smax[k]
+        Ns = self.Ns
+        p_iter = self.p_iter
         
         s1,ds1 = np.linspace(0,T,Ns,retstep=True,endpoint=True)
-        s,ds = np.linspace(0,p_iter*T,p_iter*Ns,retstep=True,endpoint=True)
+        #s,ds = np.linspace(0,p_iter*T,p_iter*Ns,retstep=True,endpoint=True)
         
         idx = np.arange(len(a))
         exp = np.exp
@@ -1403,9 +1421,9 @@ class CGL(object):
         for i in range(r*c):
             
             
-            intA = np.exp(self.kappa*s)*lam_hetA(a[i]-s,b[i]-s)
+            intA = np.exp(self.kap_val*s)*lam_hetA(a[i]-s,b[i]-s)
             
-            #intA = np.exp(self.kappa*s)*pA_interp2(a[i]-s,b[i]-s)
+            #intA = np.exp(self.kap_val*s)*pA_interp2(a[i]-s,b[i]-s)
             
             
             #err = np.amax(np.abs(intAa-intA))
@@ -1431,8 +1449,7 @@ class CGL(object):
         
         p = self.pool
         
-        print()
-        for x in tqdm.tqdm(p.imap(return_integral,idx,chunksize=200),
+        for x in tqdm.tqdm(p.imap(return_integral,idx,chunksize=2000),
                            total=len(a)):
             integral, idx = x
             pA_data[idx] = integral
@@ -1466,8 +1483,8 @@ class CGL(object):
             for j in range(self.NB[k]):
                 a, b = A_array[i], B_array[j]
                 
-                intA = np.exp(self.kappa*s)*lam_hetA(a-s,b-s)
-                #intA = np.exp(self.kappa*s)*pA_interp2(a-s,b-s)
+                intA = np.exp(self.kap_val*s)*lam_hetA(a-s,b-s)
+                #intA = np.exp(self.kap_val*s)*pA_interp2(a-s,b-s)
                 
                 pA_data[j,i] = np.sum(intA)*ds
         
@@ -1482,6 +1499,11 @@ class CGL(object):
         
         self.hodd['sym'] = []
         
+        # simplify expansion for speed
+        rule_trunc = {}
+        for k in range(self.miter,self.miter+200):
+            rule_trunc.update({self.eps**k:0})
+        
         if self.recompute_h_sym or not(lib.files_exist(self.hodd['sym_fnames'])):
             
             print('* Computing... H symbolic')
@@ -1493,8 +1515,17 @@ class CGL(object):
 
             z_rule.update({self.psi:self.pA['expand']})
             z = self.z['vec'].subs(z_rule)
+            dotproduct = self.cA['vec'].dot(z)
             
-            collected = collect(expand(self.cA['vec'].dot(z)),self.eps)
+            tmp = sym.expand(dotproduct,basic=False,deep=True,
+                             power_base=False,power_exp=False,
+                             mul=False,log=False,
+                             multinomial=True)
+            
+            tmp = tmp.subs(rule_trunc)
+            tmp = expand(tmp).subs(rule_trunc)
+            
+            collected = collect(tmp,self.eps)
             
             self.h_collected = collect(expand(collected),self.eps)
             #print('hcollected',self.h_collected)
@@ -1516,11 +1547,6 @@ class CGL(object):
         self.hodd['lam'] = []
         self.hodd['dat'] = []
         
-        #self.i_data, self.ix_imp, self.iy_imp = ([] for i in range(3))
-        #self.ix_callable, self.iy_callable = ([] for i in range(2))
-
-        
-
         if self.recompute_h or not(lib.files_exist(self.hodd['dat_fnames'])):
             
             print('* Computing...',end=' ')
@@ -1530,18 +1556,17 @@ class CGL(object):
                     **self.rule_LC_AB,
                     **self.rule_par}
             
+            """
             for i in range(self.miter):
                 
                 collected = self.hodd['sym'][i].subs(rule)
-                
-                #print('i,col',i,collected)
                 
                 ta = self.thA
                 tb = self.thB
                 
                 h_lam = sym.lambdify([ta,tb],collected)
                 self.hodd['lam'].append(h_lam)
-                
+            """
             
             for k in range(self.miter):
                 print('h_'+str(k),end=', ')
@@ -1552,7 +1577,7 @@ class CGL(object):
             
             
         else:
-            
+            print('* Loading H')
             for k in range(self.miter):
                 self.hodd['dat'].append(np.loadtxt(self.hodd['dat_fnames'][k]))
     
@@ -1585,21 +1610,54 @@ class CGL(object):
         double counting boundaries in mod operator.
         """
         
-        h_mg = np.zeros((self.NB[k],self.NA[k]))
-        
-        
-        A_array,dxA = np.linspace(0,self.T,self.NA[k],retstep=True,
+        A_array,dxA = np.linspace(0,self.T,self.NA,retstep=True,
                                   endpoint=True)
-        B_array,dxB = np.linspace(0,self.T,self.NB[k],retstep=True,
+        B_array,dxB = np.linspace(0,self.T,self.NB,retstep=True,
                                   endpoint=True)
         
-        for j in range(self.NB[k]):
-            t = A_array
+        h = np.zeros(self.NB)
+        
+        t = A_array
+        
+        #hodd_lam_k = self.hodd['lam'][k]
+        
+        rule = {**self.rule_p_AB,**self.rule_g_AB,
+                **self.rule_z_AB,**self.rule_LC_AB,
+                **self.rule_par}
+        
+        # https://stackoverflow.com/questions/30738840/...
+        # best-practice-for-using-common-subexpression-elimination...
+        # -with-lambdify-in-sympy
+        repl, redu = sym.cse(self.hodd['sym'][k].subs(rule))
+        
+        
+        funs = []
+        syms = [self.thA,self.thB]
+        for ii, v in enumerate(repl):
+            funs.append(lambdify(syms,v[1],modules='numpy'))
+            syms.append(v[0])
+        
+        glam = lambdify(syms,redu[0],modules='numpy')
+        
+        #h_mg = np.zeros((self.NB,self.NA))
+        
+        t = A_array
+        
+        for j in range(self.NB):
             eta = B_array[j]
             
-            h_mg[j,:] = self.hodd['lam'][k](t,t+eta)
+            xs = [t,t+eta]
+            for f in funs:
+                xs.append(f(*xs))
+                
+                
+            #print(glam(*xs),'xs')
+                
+            h[j] = np.sum(glam(*xs))*dxA/self.T
+            
+            #h_mg[j,:] = self.hodd['lam'][k](t,t+eta)
         
-        # for i in range(self.NA[k]):
+        # for i in range(self.NA):
         #     for j in range(self.NB):
         #         t = self.A_array[i]
         #         eta = self.B_array[j]
@@ -1607,15 +1665,15 @@ class CGL(object):
         #         h_mg[j,i] = self.h_lams[k](t,t+eta)
                 
         # sum along axis to get final form
-        h = np.sum(h_mg,axis=1)*dxA/self.T
-        if True:
+        #h = np.sum(h_mg,axis=1)*dxA/self.T
+        if False:
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.plot(h)
             title = ('h non-odd '+str(k)
-                     +'NA='+str(self.NA[k])
-                     +', NB='+str(self.NB[k])
-                     +', Ns='+str(self.Ns[k]))
+                     +'NA='+str(self.NA)
+                     +', NB='+str(self.NB)
+                     +', Ns='+str(self.Ns))
             ax.set_title(title)
             plt.show(block=True)
         
@@ -1647,7 +1705,7 @@ class CGL(object):
         
         jac = self.jacLC(t)*(order > 0)
         
-        hom = np.dot(jac-order*self.kappa*self.eye,z)
+        hom = np.dot(jac-order*self.kap_val*self.eye,z)
         #het = 0.5*np.array([hetx(t),hety(t)])
         
         #if order == 1:
@@ -1667,7 +1725,7 @@ class CGL(object):
         order determines the Taylor expansion term
         """
         
-        hom = -np.dot(self.jacLC(t).T+order*self.kappa*self.eye,z)
+        hom = -np.dot(self.jacLC(t).T+order*self.kap_val*self.eye,z)
         #het = -np.array([hetx(t),hety(t)])
         
         out = hom - het_vec(t)
@@ -1688,7 +1746,7 @@ class CGL(object):
         
         
         
-        hom = -np.dot(self.jacLC(t).T+self.kappa*(order-1)*self.eye,z)
+        hom = -np.dot(self.jacLC(t).T+self.kap_val*(order-1)*self.eye,z)
         #het = -np.array([hetx(t),hety(t)])
         
         out = hom - het_vec(t)
@@ -1856,11 +1914,11 @@ def main():
             recompute_i=False,
             recompute_k_sym=False,
             recompute_p_sym=False,
-            recompute_p=True,
+            recompute_p=False,
             recompute_h_sym=False,
-            recompute_h=True,
-            trunc_order=5,
-            trunc_derviative=5,
+            recompute_h=False,
+            trunc_order=9,
+            trunc_derviative=2,
             d_val=1,
             q_val=1,
             TN=2001,
@@ -1915,10 +1973,11 @@ def main():
     
     
 if __name__ == "__main__":
-    __spec__  = None
-    import cProfile
-    import re
-    cProfile.runctx('main()',globals(),locals(),'profile.pstats')
+    
+    __spec__ = None
+    #import cProfile
+    #import re
+    #cProfile.runctx('main()',globals(),locals(),'profile.pstats')
     #cProfile.runctx('main()',globals(),locals())
 
-    #main()
+    main()

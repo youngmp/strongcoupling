@@ -16,8 +16,8 @@ this file is also practice for creating a more general class for any RHS.
 
 coupling functions for thalamic neurons from RTSA Ermentrout, Park, Wilson 2019
 
-TODO (9/9/2020): consider uing the cse method to reduce the function calls in the 
-H function calculations. or use matrix substitution. or both
+Notes:
+    -PA requires endpoint=False. make sure corresponding dxAs are used.
 
 """
 
@@ -105,6 +105,10 @@ class Thalamic(object):
             'TN':20000,
             'dir':'dat',
             
+            'NA':500,
+            'NB':500,
+            'p_iter':25,
+            
             'recompute_LC':False,
             'recompute_monodromy':False,
             'recompute_g_sym':False,
@@ -140,16 +144,6 @@ class Thalamic(object):
         self.method = 'LSODA'
         self.rel_tol = 1e-9
         
-        # for coupling computation. ctrl+F to see usage.
-        self.NA = np.array([5000,5000,5000,5000,5000,5000,5000,5000])
-        self.NB = self.NA # do not change!!!!
-        self.Ns = self.NA # do not change!!!!
-        self.smax = np.array([1,1,1,1,1,1,1,1])
-        self.p_iter = np.array([25,25,25,25,25,25,25,25])
-        
-        self.hNA = 5000
-        self.hNB = 5000
-        
         # parameters
         self.c = symbols('c')
         self.alpha, self.beta = symbols('alpha beta')
@@ -178,7 +172,6 @@ class Thalamic(object):
         
 
         # single-oscillator variables
-        
         self.v, self.h, self.r, self.w, self.t, self.s = symbols('v h r w t s')
         self.tA, self.tB, = symbols('tA tB')
         self.dv, self.dh, self.dr, self.dw = symbols('dv dh dr dw')
@@ -260,10 +253,23 @@ class Thalamic(object):
         self.load_limit_cycle()
         
         
+        self.A_array,self.dxA = np.linspace(0,self.T,self.NA,
+                                            retstep=True,
+                                            endpoint=True)
+        self.B_array,self.dxB = np.linspace(0,self.T,self.NB,
+                                            retstep=True,
+                                            endpoint=True)
+        
+        self.Aarr_noend,self.dxA_noend = np.linspace(0,self.T,self.NA,
+                                                     retstep=True,
+                                                     endpoint=False)
+        self.Barr_noend,self.dxB_noend = np.linspace(0,self.T,self.NB,
+                                                     retstep=True,
+                                                     endpoint=False)
+        
         if self.load_all:
                 
             slib.generate_expansions(self)
-            #slib.generate_coupling_expansions(self)
             slib.load_coupling_expansions(self)
             slib.load_jac_sym(self)
             
@@ -785,7 +791,7 @@ class Thalamic(object):
         
         #print('min idx for prc',idx,)
         
-        #print('Monodromy'e,self.M)
+        #print('Monodromy',self.M)
         #print('eigenvectors',self.eigenvectors)
         
         print('g1_init',self.g1_init)
@@ -844,8 +850,8 @@ class Thalamic(object):
             for i in range(self.miter):
                 for key in self.var_names:
                     expr = sym_collected[key].coeff(self.psi,i)
-                    
-                    print('gsym',expr,i,key)
+        
+        
                     self.g['sym_'+key].append(expr)
                     #print(self.g_sym_fnames[key][i])
                     dill.dump(self.g['sym_'+key][i],
@@ -1028,9 +1034,9 @@ class Thalamic(object):
         else:
             files_do_not_exist = False
             
-        print('* Computing heterogeneous terms...')
+        
         if self.recompute_het_sym or files_do_not_exist:
-            
+            print('* Computing heterogeneous terms...')
             sym_collected = self.generate_het_sym()
             
             for i in range(self.miter):
@@ -1051,6 +1057,7 @@ class Thalamic(object):
             dill.dump(self.A,open(self.A_fname,'wb'),recurse=True)
             
         else:
+            print('* Loading heterogeneous terms...')
             self.A, = lib.load_dill([self.A_fname])
             for key in self.var_names:
                 self.z['sym_'+key] = lib.load_dill(self.z['sym_fnames_'+key])
@@ -1433,9 +1440,9 @@ class Thalamic(object):
         else:
             files_do_not_exist = False
             
-        print('* Computing K symbolic...')
+        
         if self.recompute_k_sym or files_do_not_exist:
-            
+            print('* Computing K symbolic...')
             
             self.cA, self.cB = self.generate_k_sym()
             
@@ -1483,6 +1490,7 @@ class Thalamic(object):
                     
                 
         else:
+            print('* Loading K symbolic...')
             for key in self.var_names:
                 self.kA['sym_'+key] = lib.load_dill(self.kA['sym_fnames_'+key])
                 self.kB['sym_'+key] = lib.load_dill(self.kB['sym_fnames_'+key])
@@ -1588,20 +1596,14 @@ class Thalamic(object):
         
         
         #print('starting new pool')
-        self.pool = _ProcessPool(processes=12)
+        self.pool = _ProcessPool(processes=8)
         
         for i,fname in enumerate(self.pA['dat_fnames']):
-            A_array,dxA = np.linspace(0,self.T,self.NA[i],retstep=True,
-                                      endpoint=False)
-            B_array,dxB = np.linspace(0,self.T,self.NB[i],retstep=True,
-                                      endpoint=False)
-            
-            
-            
+            #print('pA datfname',fname,os.path.isfile(fname))
             if self.recompute_p or not(os.path.isfile(fname)):
                 print('* Computing p'+str(i)+'...')
                 start = time.time()
-                pA_data = self.generate_p(i,A_array,B_array,dxA)
+                pA_data = self.generate_p(i)
                 end = time.time()
                 print('time elapsed for p'+str(i)+' = '+str(end-start))
                 
@@ -1624,14 +1626,13 @@ class Thalamic(object):
                 ax.set_ylabel('B[::-1]')
                 ax.set_xlabel('A')
                 ax.set_title('pA data'+str(i)\
-                             +' NA='+str(self.NA[i])\
-                             +' p_iter='+str(self.p_iter[i]))
+                             +' NA='+str(self.NA)\
+                             +' p_iter='+str(self.p_iter))
                 plt.show(block=True)
                 plt.close()
             
-            #A_array2 = np.linspace(0,self.T,self.TN)
-            #B_array2 = np.linspace(0,self.T,self.TN)
-            pA_interp = interp2d(A_array,B_array,
+            pA_interp = interp2d(self.Aarr_noend,
+                                 self.Barr_noend,
                                  pA_data,bounds_error=False,
                                  fill_value=None,kind='quintic')
             
@@ -1670,7 +1671,7 @@ class Thalamic(object):
         
         self.rule_p_AB = {**rule_pA,**rule_pB}
         
-    def generate_p(self,k,A_array,B_array,dxA):
+    def generate_p(self,k):
         
         import scipy as sp
         import numpy as np
@@ -1678,9 +1679,15 @@ class Thalamic(object):
         ta = self.thA
         tb = self.thB
         
+        NA = self.NA
+        NB = self.NB
+        dxA_noend = self.dxA_noend
+        T = self.T
+        
+        grub
         if k == 0:
             #pA0 is 0 (no forcing function)
-            return np.zeros((self.NB[k],self.NA[k]))
+            return np.zeros((self.NB,self.NA))
         
         # put these implemented functions into the expansion
         ruleA = {sym.Indexed('pA',i):
@@ -1714,16 +1721,17 @@ class Thalamic(object):
         
         glam = lambdify(syms,redu[0],modules='numpy')
         
-        # maximize accuracy of interpolation
-        #NA2 = self.TN
-        #NB2 = NA2+1
-        #lam_hetA_data = np.zeros((NB2,NA2))
-        lam_hetA_data = np.zeros((self.NB[k],self.NA[k]))
+        #lam_hetA = lambdify([ta,tb],ph_impA)
         
-        A_array2 = A_array#np.linspace(0,self.T,NA2,endpoint=True)
-        B_array2 = B_array#np.linspace(0,self.T,NB2,endpoint=True)
+        lam_hetA_data = np.zeros((NB,NA))
         
-        for i in range(self.NA[k]):
+        A_array2 = self.Aarr_noend
+        B_array2 = self.Barr_noend
+        
+        #print(A_array2[0],A_array2[-1],B_array2[0],B_array2[-1],self.dxA)
+        #print(np.sum(lam_hetA(A_array2,B_array2)))
+        
+        for i in range(NA):
             ta2 = A_array2[i]*np.ones_like(B_array2)
             tb2 = B_array2
             
@@ -1735,47 +1743,17 @@ class Thalamic(object):
             #lam_hetA_data[:,i] = lam_hetA(ta2,tb2)
             lam_hetA_data[:,i] = glam(*xs)
         
-        het_interp = interp2d(A_array2,B_array2,lam_hetA_data,kind='quintic')
         
-        #pA_imp = implemented_function('temp',self.myFunMod2A(het_interp))
+        A_mg, B_mg = np.meshgrid(A_array2,B_array2)
         
-        #pA_interp2 = interp2db(het_interp,self.T)
-        #pA_interp2 = lam_hetA
-        #lam_hetA = lambdify([ta,tb],pA_imp(ta,tb))
-        
-        A_mg, B_mg = np.meshgrid(A_array,B_array)
-        
-        if False:
-            
-            fig = plt.figure()
-            ax1 = fig.add_subplot(121)
-            ax2 = fig.add_subplot(122)
-            ax1.set_title('lam hetA, interp.')
-            #im1 = ax1.imshow(lam_hetA_data[3800:,:],aspect='auto')
-            #im2 = ax2.imshow(het_interp(A_array,B_array)[180:,:],
-            #                 aspect='auto')
-            
-            idx1 = int(.95*self.NA[k])
-            idx2 = int(.7*self.NA[k])
-            im1 = ax1.imshow(lam_hetA_data[idx1:,idx2:],aspect='auto')
-            im2 = ax2.imshow(het_interp(A_array,B_array)[idx1:,idx2:],
-                             aspect='auto')
-            
-            ax1.set_xlim()
-            #ax1.imshow(lam_hetA_old(A_mg,B_mg))
-            #ax2.imshow(het_interp(A_array,B_array))
-            
-            plt.show(block=True)
         
         # parallelize
-        #s = copy.deepcopy(self.interval)
         kappa = self.kappa
        
         r,c = np.shape(A_mg)
         a = np.reshape(A_mg,(r*c,))
-        b = np.reshape(B_mg,(r*c,))
         
-        a_i = np.arange(self.NA[k],dtype=int)
+        a_i = np.arange(NA,dtype=int)
         A_mg_idxs, B_mg_idxs = np.meshgrid(a_i,a_i)
         
         a_mg_idxs = np.reshape(A_mg_idxs,(r*c,))
@@ -1787,81 +1765,12 @@ class Thalamic(object):
         idx = np.arange(len(a))
         exp = np.exp
         
+        p_iter = self.p_iter
         
-        #i = 10
-        T = self.T
-        smax = self.smax[k]
-        Ns = self.Ns[k]
-        p_iter = self.p_iter[k]
-        
-        s1,ds1 = np.linspace(0,T,Ns,retstep=True,endpoint=False)
-        s,ds = np.linspace(0,p_iter*T,p_iter*Ns,retstep=True,endpoint=False)
-        
-        temp_arr = np.zeros(self.NA[k])
-        temp_mat = np.zeros((self.NB[k],self.NA[k]))
-        
-        s = np.arange(0,T*p_iter,dxA)
+        s = np.arange(0,T*p_iter,dxA_noend)
         s_idxs = np.arange(len(s),dtype=int)
         exponential = exp(s*kappa)
         
-        """
-        periodic = -69
-        
-        flag_temp = True
-        
-        if flag_temp:
-            counter = 0
-            idx1 = int(.96*self.NA[k])
-            fig,axs = plt.subplots(self.NA[k]-idx1,1,figsize=(5,10))
-            
-            
-        
-        for i in range(self.NA[k]):
-            
-            for j in range(self.NB[k]):
-                
-                
-                a_idxs = np.mod(i-s_idxs,self.NA[k])
-                b_idxs = np.mod(j-s_idxs,self.NB[k])
-                
-                periodic_prev = periodic
-                periodic = lam_hetA_data[b_idxs,a_idxs]
-                
-                temp_mat_prev = temp_mat[j-1,i]
-                temp_mat[j,i] = np.sum(exponential*periodic)*dxA
-                
-                
-                
-                if flag_temp\
-                    and (i == int(.90*self.NA[k]))\
-                        and (j >= idx1):
-                    #axs[counter].plot(periodic)
-                    axs[counter].plot(exponential*periodic)
-                    axs[counter].set_xlim(0,20)
-                    print(i,j,np.sum(periodic)*dxA,
-                          np.sum(exponential)*dxA,
-                          temp_mat[j,i])
-                    counter += 1
-            
-            #val = 0
-            #pA_one_period = pA_interp2(a[i]-s1,b[0]-s1)
-            
-            #for j in range(p_iter):
-            #    #s_interval = np.linspace(j*T,(j+1)*T,Ns,endpoint=False)
-            #    s_interval = s1+j*T
-            #    val += np.sum(pA_one_period*exp(kappa*s_interval))*ds1
-            
-            #temp_arr[i] = val
-        
-
-        if flag_temp:
-            plt.show(block=True)
-        """
-        
-        #pA_data = temp_mat
-        
-        NA = self.NA[k]
-        NB = self.NB[k]
         def return_integral(i):
             """
             return time integral at position a,b
@@ -1872,77 +1781,19 @@ class Thalamic(object):
             
             periodic = lam_hetA_data[b_idxs,a_idxs]
             
-            
-            return np.sum(exponential*periodic)*dxA, i
-            #pA_one_period = pA_interp2(a[i]-s1,b[i]-s1)
-            
-            #val = 0
-            #for j in range(p_iter):
-            #    #s_interval = np.linspace(j*T,(j+1)*T,Ns,endpoint=False)
-            #    s_interval = s1+j*T
-            #    val += np.sum(pA_one_period*exp(kappa*s_interval))*ds1
-            #return val,i
-        
+            return np.sum(exponential*periodic)*dxA_noend, i
         
         p = self.pool
         
-        for x in tqdm.tqdm(p.imap(return_integral,idx,chunksize=10000),
+        for x in tqdm.tqdm(p.imap(return_integral,idx,chunksize=200000),
                            total=len(a)):
             integral, idx = x
             pA_data[idx] = integral
             
         pA_data = np.reshape(pA_data,(r,c))
         
-        
-        # vectorize in time domain (slowest)
-        """
-        s = self.interval
-        for i in range(self.A_array[k]):
-            for j in range(self.B_array[k]):
-                a = self.A_array[i]
-                b = self.B_array[j]
-                pA_data[j,i] = np.exp(self.kappa*s)*lam_hetA(a-s,b-s)
-        """
-        
-        
-        # vectorize in position domain
-        """
-        #r,c = np.shape(self.A_mg)
-        #a = np.reshape(self.A_mg,(r*c,))
-        #b = np.reshape(self.B_mg,(r*c,))
-        for i in range(len(self.interval)):
-            print('i in p'+str(k)+' function',i)
-            s = self.interval[i]
-            
-            het = np.reshape(lam_hetA(a-s,b-s),(r,c))
-
-            pA_data += np.exp(self.kappa*s)*het
-            
-        pA_data *= self.ds
-        """
-        
-        if False:
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            
-            ax.matshow(temp_mat,cmap='viridis')
-            
-            ax.set_ylabel('B')
-            ax.set_xlabel('A')
-            ax.set_title('pa sum fast'+str(k))
-            plt.show(block=True)
-            plt.close()
-        
         return pA_data
     
-    #def run_integral(self):
-    #    self.result = self.map()
-    def start(self):
-        self.result = self.map(self.return_int_value,self.interval)
-        return self.result
-        
-    
-        
     def load_h_sym(self):
         """
         also compute h lam
@@ -1956,10 +1807,11 @@ class Thalamic(object):
         for k in range(self.miter,self.miter+200):
             rule_trunc.update({self.eps**k:0})
         
-        print('* Computing H symbolic...')
+        
         #print(lib.files_exist(self.hodd['sym_fnames']))
         if self.recompute_h_sym or \
             not(lib.files_exist(self.hodd['sym_fnames'])):
+            print('* Computing H symbolic...')
             
             z_rule = {}
             for key in self.var_names:
@@ -1968,8 +1820,6 @@ class Thalamic(object):
                                    Indexed('z'+key+'A',i)})
 
             z_rule.update({self.psi:self.pA['expand']})
-            
-            
             
             z = self.z['vec'].subs(z_rule)
             dotproduct = self.cA['vec'].dot(z)
@@ -1998,80 +1848,27 @@ class Thalamic(object):
                           open(self.hodd['sym_fnames'][i],'wb'),recurse=True)
                 
         else:
+            print('* Loading H symbolic...')
             self.hodd['sym'] = lib.load_dill(self.hodd['sym_fnames'])
-            
             
         # lambdify symbolic call
         self.hodd['lam'] = []
+        
+        # change lam into data set and interp2d call for speed.
+        
         rule = {**self.rule_p_AB,**self.rule_g_AB,
                 **self.rule_z_AB,**self.rule_LC_AB,
                 **self.rule_par}
-                
+        
+        ta = self.thA
+        tb = self.thB
+        
         for i in range(self.miter):
-            
-            #collected = sym.simplify(self.hodd['sym'][i].subs(rule))
-            
-            #print('collected h',sym.simplify(collected))
-            
-            ta = self.thA
-            tb = self.thB
-            
-            #h_lam = lambdify([ta,tb],self.hodd['sym'][i].subs(rule),
-            #                 modules='numpy')
-            #h_lam = ufuncify([ta,tb],collected)
-            
-            # change lam into data set and interp2d call for speed.
-            NA = self.NA[i]
-            NB = self.NB[i]
-            
-            # https://stackoverflow.com/questions/30738840/...
-            # best-practice-for-using-common-subexpression-elimination...
-            # -with-lambdify-in-sympy
-            repl, redu = sym.cse(self.hodd['sym'][i].subs(rule))
-            
-            funs = []
-            syms = [ta,tb]
-            for ii, v in enumerate(repl):
-                funs.append(lambdify(syms,v[1],modules='numpy'))
-                syms.append(v[0])
-            
-            glam = lambdify(syms,redu[0],modules='numpy')
-            
-            #print('assignments',assignments)
-            #print('fn',fn)
-            #print(fn[0].subs(assignments[::-1]))
-            
-            A_array,dxA = np.linspace(0,self.T,NA,retstep=True,endpoint=True)
-            B_array,dxB = np.linspace(0,self.T,NB,retstep=True,endpoint=True)
-            
-            A_arr = A_array
-            B_arr = B_array
-            
-            ta2 = A_arr[0]*np.ones_like(B_arr)
-            tb2 = B_arr
-            
-            lam_h_data = np.zeros((NB,NA))
-            
-            for j in range(NA):
-                if j % int(NA/5) == 0:
-                    print('hsym',i,j)
-
-                ta2 = A_arr[j]*np.ones_like(B_arr)
-                tb2 = B_arr
-                
-                xs = [ta2,tb2]
-                
-                for f in funs:
-                    xs.append(f(*xs))
-                    
-                
-                lam_h_data[:,j] = glam(*xs)
-            
-            h_interp = interp2d(A_arr,B_arr,lam_h_data,kind='quintic')
-            h_interp2 = interp2db(h_interp,self.T)
-            
-            self.hodd['lam'].append(h_interp2)
-            
+            #pass
+            h_lam = lambdify([ta,tb],self.hodd['sym'][i].subs(rule),
+                             modules='numpy')
+            self.hodd['lam'].append(h_lam)
+        
             
     def load_h(self):
         
@@ -2092,7 +1889,7 @@ class Thalamic(object):
                 print('* Loading H'+str(i)+'...')
                 data = np.loadtxt(self.hodd['dat_fnames'][i])
                 
-            if True:
+            if False:
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
                 ax.plot(data)
@@ -2117,45 +1914,64 @@ class Thalamic(object):
         double counting boundaries in mod operator.
         """
         
+        #T = self.T
         
+        h = np.zeros(self.NB)
         
-        NA = self.hNA
-        NB = self.hNB
-        T = self.T
-        
-        h = np.zeros(NB)
-        
-        A_array,dxA = np.linspace(0,T,NA,retstep=True,endpoint=True)
-        B_array,dxB = np.linspace(0,T,NB,retstep=True,endpoint=True)
-        
-        t = A_array
+        t = self.A_array
         
         #hodd_lam_k = self.hodd['lam'][k]
         
-        for j in range(NB):
-            eta = B_array[j]
-            h[j] = np.sum(self.hodd['lam'][k](t,t+eta))*dxA/self.T
+        rule = {**self.rule_p_AB,**self.rule_g_AB,
+                **self.rule_z_AB,**self.rule_LC_AB,
+                **self.rule_par}
+        
+        # https://stackoverflow.com/questions/30738840/...
+        # best-practice-for-using-common-subexpression-elimination...
+        # -with-lambdify-in-sympy
+        repl, redu = sym.cse(self.hodd['sym'][k].subs(rule))
+        
+        funs = []
+        syms = [self.thA,self.thB]
+        for ii, v in enumerate(repl):
+            funs.append(lambdify(syms,v[1],modules='numpy'))
+            syms.append(v[0])
+        
+        glam = lambdify(syms,redu[0],modules='numpy')
+        
+        #lam_h_data[:,j] = glam(*xs)
+    
+        for j in range(self.NB):
+            eta = self.B_array[j]
+            
+            xs = [t,t+eta]
+            for f in funs:
+                xs.append(f(*xs))
+                
+            #print(xs,'xs')
+                
+            h[j] = np.sum(glam(*xs))*self.dxA/self.T
+            
+            #h[j] = np.sum(self.hodd['lam'][k](t,t+eta))*self.dxA/self.T
         
         """
         def return_integral(i):
             
-            eta = B_array[i]
-            out = np.sum(hodd_lam_k(t,t+eta))*dxA/T
+            eta = self.B_array[i]
+            out = np.sum(hodd_lam_k(t,t+eta))*self.dxA/T
             
             return out,i
         
         
-        b_i = np.arange(NB,dtype=int)
+        b_i = np.arange(self.NB,dtype=int)
         
         p = self.pool
         
-        for x in tqdm.tqdm(p.imap(return_integral,b_i,chunksize=1000),
+        for x in tqdm.tqdm(p.imap(return_integral,b_i,chunksize=100),
                            total=len(b_i)):
             integral, idx = x
             h[idx] = integral
         """
-        
-        
         
         
         #for j in range(self.NB[k]):
@@ -2180,11 +1996,9 @@ class Thalamic(object):
             ax = fig.add_subplot(111)
             ax.plot(h)
             title = ('h non-odd '+str(k)
-                     +'NA='+str(self.NA[k])
-                     +', NB='+str(self.NB[k])
-                     +', Ns='+str(self.Ns[k])
-                     +', smax='+str(self.smax[k])
-                     +', piter='+str(self.p_iter[k]))
+                     +', NA='+str(self.NA)
+                     +', NB='+str(self.NB)
+                     +', piter='+str(self.p_iter))
             ax.set_title(title)
             plt.show(block=True)
         
@@ -2400,8 +2214,11 @@ def main():
                  recompute_p=False,
                  recompute_h_sym=False,
                  recompute_h=True,
-                 trunc_order=7,
-                 TN=20000,
+                 trunc_order=9,
+                 NA=10000,
+                 NB=10000,
+                 p_iter=10,
+                 TN=100000,
                  ib_val=3.5,
                  load_all=True)
     
@@ -2464,7 +2281,7 @@ def main():
 if __name__ == "__main__":
     
     
-    __spec__  = None
+    __spec__ = None
     #import cProfile
     #import re
     #cProfile.runctx('main()',globals(),locals(),'profile.pstats')
