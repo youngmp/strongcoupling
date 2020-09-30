@@ -10,12 +10,20 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import (inset_axes, mark_inset)
+<<<<<<< Updated upstream
 
+=======
+from scipy.signal import find_peaks
+from scipy.integrate import solve_ivp
+>>>>>>> Stashed changes
 from matplotlib.legend_handler import HandlerBase
-
-from CGL import CGL
-
 from scipy.optimize import brentq
+
+import CGL
+import Thalamic
+
+from StrongCoupling import StrongCoupling
+
 
 matplotlib.rcParams['font.family'] = 'serif'
 matplotlib.rcParams['text.usetex'] = True
@@ -76,6 +84,140 @@ def return_slope_sign(eps,hterms,state='sync',order=8):
         
     return diff
 
+
+def h(order,hs,eps):
+
+    # construct h function
+    h = 0
+    for i in range(order):
+        h += eps**(i+1)*hs[i]
+    return h
+
+
+def cgl_h():
+    
+    fig, axs = plt.subplots(nrows=2,ncols=3,
+                            figsize=(7,3.5))
+    
+    d_center = 1
+    d_vals = np.linspace(d_center-1,d_center+1,100)[10:][::2]
+    d1 = d_vals[6]
+    d2 = d_vals[3]
+
+    order_list = [2,4,10]
+    
+    var_names = ['x','y']
+    
+    pardict = {'q_val':1,
+               'eps_val':0,
+               'd_val':1}
+    
+    kwargs = {'recompute_LC':False,
+              'recompute_monodromy':False,
+              'recompute_g_sym':False,
+              'recompute_g':False,
+              'recompute_het_sym':False,
+              'recompute_z':False,
+              'recompute_i':False,
+              'recompute_k_sym':False,
+              'recompute_p_sym':False,
+              'recompute_p':False,
+              'recompute_h_sym':False,
+              'recompute_h':False,
+              'trunc_order':9,
+              'dir':'cgl_dat/',
+              'NA':501,
+              'NB':501,
+              'p_iter':25,
+              'TN':2001,
+              'rtol':1e-7,
+              'atol':1e-7,
+              'rel_tol':1e-6,
+              'method':'LSODA',
+              'load_all':False}
+    
+    T_init = 2*np.pi
+    LC_init = np.array([1,0,T_init])
+
+    kwargs['d_val'] = d1
+    a1 = StrongCoupling(CGL.rhs,CGL.coupling,LC_init,
+                           var_names,pardict,**kwargs)
+
+    kwargs['d_val'] = d2
+    a2 = StrongCoupling(CGL.rhs,CGL.coupling,LC_init,
+                           var_names,pardict,**kwargs)
+
+    a1.load_h()
+    a2.load_h()
+
+    eps1 = .3
+    eps2 = -.7
+
+    label1 = [r'\textbf{A}'+r' $d=%.1f$, $\varepsilon=%.1f$'
+                       % (a1.d_val, eps1),r'\textbf{B}',r'\textbf{C}']
+    label2 = [r'\textbf{D}'+r' $d=%.1f$, $\varepsilon=%.1f$'
+                       % (a2.d_val, eps2),r'\textbf{E}',r'\textbf{F}']
+    
+    xs = [0.35,0,0]
+    
+    axs[0,0].set_ylabel(r'$-2\mathcal{H}_\text{odd}(\phi)$')
+    axs[1,0].set_ylabel(r'$-2\mathcal{H}_\text{odd}(\phi)$')
+    
+    for i in range(3):
+        h1 = h(order_list[i],a1.hodd['dat'],eps1)
+        h2 = h(order_list[i],a2.hodd['dat'],eps2)
+
+        x = np.linspace(0,a1.T,len(h1))
+
+        # h functions
+        axs[0,i].plot(x,h1,color='k',label='Order '+str(order_list[i]))
+        axs[1,i].plot(x,h2,color='k',label='Order '+str(order_list[i]))
+
+        # zero line
+        axs[0,i].plot([0,2*np.pi],[0,0],color='gray',lw=.5,zorder=-1)
+        axs[1,i].plot([0,2*np.pi],[0,0],color='gray',lw=.5,zorder=-1)
+        
+        axs[0,i].set_xlim(0,2*np.pi)
+        axs[1,i].set_xlim(0,2*np.pi)
+
+        axs[0,i].text(4,np.amin(h1)/2,'Order '+str(order_list[i]))
+        axs[1,i].text(4,np.amax(h2)/2,'Order '+str(order_list[i]))
+
+        axs[1,i].set_xlabel(r'$\phi$')
+        
+        axs[0,i].set_title(label1[i],x=xs[i])
+        axs[1,i].set_title(label2[i],x=xs[i])
+        #axs[1,i].set_title('d='+str(a2.d_val)
+        #                   +'Order '+str(order_list[i]))
+        #axs[0,i].legend(fontsize=8)
+        #axs[1,i].legend(fontsize=8)
+        
+        axs[0,i].set_xticks([0,np.pi,2*np.pi])
+        axs[1,i].set_xticks([0,np.pi,2*np.pi])
+        
+        axs[0,i].set_xticklabels(['$0$','$T/2$','$T$'])
+        axs[1,i].set_xticklabels(['$0$','$T/2$','$T$'])
+
+        if i == 2:
+            axins = inset_axes(axs[1,i], width="40%", height="25%", loc=3)
+            #axins.plot([Us[0],Us[-1]],[0,0],color='gray',lw=1)
+            upper_idx = 11
+            axins.plot(x[:upper_idx],h2[:upper_idx],color='k')
+            axins.set_xlim(0,np.amax(x[:upper_idx]))
+            axins.set_ylim(np.amin(h2[:upper_idx])-.05,np.amax(h2[:upper_idx])+.05)
+            axins.plot([0,2*np.pi],[0,0],color='gray',lw=.5,zorder=-1)
+
+            #axins.scatter(Us[c_idxs],np.zeros(len(Us[c_idxs])),color='k',zorder=6,s=6)    
+            mark_inset(axs[1,i], axins, loc1=2, loc2=1, fc="none", ec='0.5',alpha=0.5)
+
+            axins.set_xticks([])
+            axins.set_yticks([])
+        
+
+    plt.tight_layout()
+    return fig
+
+
 def cgl_2par(recompute_2par=False,recompute_all=False):
     
     fig = plt.figure(figsize=(5,4))
@@ -87,35 +229,52 @@ def cgl_2par(recompute_2par=False,recompute_all=False):
     d_center = 1
     d_vals = np.linspace(d_center-1,d_center+1,100)[10:][::2]
     
-    options = {'recompute_g_sym':False,
-               'recompute_g':False,
-               'recompute_het_sym':False,
-               'recompute_z':False,
-               'recompute_i':False,
-               'recompute_k_sym':False,
-               'recompute_p_sym':False,
-               'recompute_p':recompute_all,
-               'recompute_h_sym':False,
-               'recompute_h':recompute_all,
-               'trunc_order':9,
-               'trunc_derviative':2,
-               'd_val':1,
-               'q_val':1,
-               'TN':2001,
-               'load_all':True}
+    var_names = ['x','y']
     
-    q_val = options['q_val']
+    pardict = {'q_val':1,
+               'eps_val':0,
+               'd_val':1}
+    
+    kwargs = {'recompute_LC':False,
+              'recompute_monodromy':False,
+              'recompute_g_sym':False,
+              'recompute_g':False,
+              'recompute_het_sym':False,
+              'recompute_z':False,
+              'recompute_i':False,
+              'recompute_k_sym':False,
+              'recompute_p_sym':False,
+              'recompute_p':False,
+              'recompute_h_sym':False,
+              'recompute_h':False,
+              'trunc_order':9,
+              'dir':'cgl_dat/',
+              'NA':501,
+              'NB':501,
+              'p_iter':25,
+              'TN':2001,
+              'rtol':1e-7,
+              'atol':1e-7,
+              'rel_tol':1e-6,
+              'method':'LSODA',
+              'load_all':True}
+    
+    T_init = 2*np.pi
+    LC_init = np.array([1,0,T_init])
+    
+    q_val = pardict['q_val']
     #d_val = options['d_val']
     
     fname = ('twopar_cgl'
-             +'_order='+str(options['trunc_order'])
+             +'_order='+str(kwargs['trunc_order'])
              +'.txt')
     
     file_not_found = not(os.path.isfile(fname))
     
     if recompute_2par or file_not_found:
-        a = CGL(**options)
-        options['load_all'] = False
+        a = StrongCoupling(CGL.rhs,CGL.coupling,LC_init,
+                           var_names,pardict,**kwargs)
+        kwargs['load_all'] = False
         
         # first column d, second col sync, third column anti.
         ve_sync_anti = np.zeros((len(d_vals),3))
@@ -123,9 +282,10 @@ def cgl_2par(recompute_2par=False,recompute_all=False):
         
         for j,d in enumerate(d_vals):
             print('j,d =',j,d)
-            options['d_val'] = d
+            pardict['d_val'] = d
             
-            a.__init__(**options)
+            a.__init__(CGL.rhs,CGL.coupling,LC_init,
+                       var_names,pardict,**kwargs)
             
             a.load_p_sym()
             a.load_p()
@@ -245,6 +405,7 @@ def cgl_2par(recompute_2par=False,recompute_all=False):
     
     return fig
 
+<<<<<<< Updated upstream
 def h(order,hs,eps):
 
     # construct h function
@@ -351,6 +512,153 @@ def cgl_h():
 
     plt.tight_layout()
     return fig
+=======
+def rhs(t,y,obj,eps):
+    """
+    get thal rhs out of obj
+    """
+    
+    z = np.zeros(len(y))
+    #print('y[:4]',y[:4])
+    #print('y[:4]',y[4:])
+    y_reverse = np.zeros(8)
+    y_reverse[:4] = y[4:]
+    y_reverse[4:] = y[:4]
+    z[:4] = obj.thal_rhs(t,y[:4]) + eps*obj.thal_coupling(y)
+    z[4:] = obj.thal_rhs(t,y[4:]) + eps*obj.thal_coupling(y_reverse)
+    #(z,t)
+    return z
+
+
+def thalamic_diffs(ax,a,eps,recompute=False,Tf=0):
+    """
+    show numerical simulation of phase differences over time
+    """
+    #T = 10.648268787326938
+    
+    # simulate series of thalamic models for different initial conditions
+
+    if eps > 0.01 and eps < 0.05:
+        T = a.T
+        LC = np.loadtxt('thal2_lc_eps=0.dat')
+        T2 = T
+    elif eps == 0.1 or eps == 0.09:
+        LC = np.loadtxt('thal2_lc_eps=0.dat')
+        T = LC[-1,0]
+        T2 = T
+        print('WARNING: using eps=0 period for eps=0.1')
+    elif eps == 0.25:
+        LC = np.loadtxt('thal2_lc_eps=0.dat')
+        
+        LC_small = np.loadtxt('thal2_lc_large_eps=.25.dat')
+        #LC_large = np.loadtxt('thal2_lc_small_eps=.25.dat')
+        
+        #T = LC_small[-1,0]
+        #T2 = 8.43
+        
+        T = LC[-1,0]
+        T2 = T
+    else:
+        raise ValueError('Please fetch period for eps='+str(eps)+
+                         'and enter it into thalamic_diffs')
+    
+    #theta_vals = np.linspace(.1,T/2,10)
+    
+    theta_vals = np.arange(T/20,T,T/20)
+    
+    for i,theta in enumerate(theta_vals):
+        
+        fname = (a.dir+'diff_phi='+str(theta)
+                 +'_eps='+str(eps)+'Tf='+str(Tf))+'.txt'
+        
+        file_does_not_exist = not(os.path.isfile(fname))
+        
+        if file_does_not_exist or recompute:
+            phase1 = 0
+            phase2 = theta
+            
+            # transform to indices and get inits
+            phase1_idx = int(phase1*len(LC[:,0])/T)
+            phase2_idx = int(phase2*len(LC[:,0])/T)
+            
+            #print(phase1_idx,phase2_idx,len(LC),phase2-phase1)
+            #print(LC_small[phase1_idx,:])
+            init = np.append(LC[phase1_idx,1:],LC[phase2_idx,1:])
+            init[np.array([0,4])] /= 100
+            init[np.array([2,6])] *= 100
+            
+            sol = solve_ivp(rhs,[0,Tf],init,args=(a,eps),method='LSODA',
+                            atol=1e-8,rtol=1e-8)
+            
+            v1_peak_idxs = find_peaks(sol.y[0,:])[0]
+            v2_peak_idxs = find_peaks(sol.y[4,:])[0]
+            
+            # match total number of peaks
+            min_idx = np.amin([len(v1_peak_idxs),len(v2_peak_idxs)])
+            v1_peak_idxs = v1_peak_idxs[:min_idx]
+            v2_peak_idxs = v2_peak_idxs[:min_idx]
+            
+            phase1 = sol.t[v1_peak_idxs]
+            phase2 = sol.t[v2_peak_idxs]
+            
+            t1 = sol.t[v1_peak_idxs]
+            #phi = (phase2-phase1)
+            
+            #pos = np.where(np.abs(np.diff(phi)) >= 0.25)[0]
+            #t1 = np.insert(t1, pos, np.nan)
+            #phi[pos] *= -phi[pos] 
+            
+            #phi = np.mod(phi,1)
+            
+            #if (phase2-phase1)[-1] > -6 and (phase2-phase1)[-1] < -2:
+            #    # collect phase difs ending in antiphase (period 8.4)
+                
+                
+            #else:
+            #    # colelct phase diffs ending in snychorony (period 10)
+            #    phi = np.mod((phase2-phase1)/T,1)
+            #    #phi = (phase2-phase1)/T
+            
+            data = np.zeros((len(t1),3))
+            data[:,0] = t1
+            data[:,1] = phase1
+            data[:,2] = phase2
+            
+            np.savetxt(fname,data)
+            
+        else:
+            data = np.loadtxt(fname)
+            
+        t = data[:,0]
+        phi = data[:,2] - data[:,1]
+        
+        if eps == 0.25 or eps == 0.09:
+            if phi[-1] > 0:
+                phi *= -1
+            
+            
+        phi_mod = np.mod(phi,T)
+        pos = np.where(np.abs(np.diff(phi_mod)) >= 0.25)[0]
+        
+        t = np.delete(t,pos)
+        phi_mod = np.delete(phi_mod,pos)
+        
+        phi2 = phi_mod/T
+        
+            
+        #ax.plot(data[:,2]-data[:,1],data[:,0],color='k',lw=1)
+        ax.plot(phi2,t,color='k',lw=1)
+        #ax.plot(t,data[:,2]-np.linspace(0,data[-1,0],len(data[:,0])),color='k',lw=1)
+        
+        #print(fname)
+        #ax.plot(data[:,0],data[:,1],color='k',lw=1)
+        ax.set_ylim(data[:,0][-1],data[:,0][0])
+            
+        ax.set_xticks([0,1/2,1])
+        ax.set_xticklabels(['$0$','$T/2$','$T$'])
+    return ax
+
+>>>>>>> Stashed changes
 
 
 def thalamic_h():
@@ -386,10 +694,18 @@ def main():
     
     # listed in order of Figures in paper
     figures = [
+<<<<<<< Updated upstream
         #(cgl_h,[],['cgl_h.pdf','cgl_h.png'])
         #(cgl_2par,[],['cgl_2par.pdf','cgl_2par.png']),
         (thalamic_h,[],['thalamic_h.pdf']),
         #(thalamic_1par,[],['thalamic_1par.pdf']),
+=======
+        (cgl_h,[],['cgl_h.pdf','cgl_h.png']),
+        (cgl_2par,[],['cgl_2par.pdf','cgl_2par.png']),
+        
+        #(thalamic_h,[],['thal_h.pdf','thal_h.png']),
+        #(thalamic_1par,[],['thal_1par.pdf']),
+>>>>>>> Stashed changes
     ]
     
     for fig in figures:
