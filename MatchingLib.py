@@ -413,7 +413,7 @@ def get_newton_jac(obj,fn,tLC,init,hetx_lam=None,hety_lam=None,k=None,eps=0.1,
 
 def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
                 rel_tol=1e-12,rel_err=10,backwards=True,eps=1e-1,
-                exception=False,alpha=1):
+                exception=False,alpha=1,min_iter=5):
     if backwards:
         tLC = -obj.tLC
     else:
@@ -422,9 +422,15 @@ def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
     counter = 0
     dx = 100
     
+    #smallest_init = np.zeros(len(init))+10
+    dx_smallest = np.zeros(len(init))+10
+    
     try:
      
-        while (np.linalg.norm(dx) > rel_tol) and (counter < max_iter):
+        while counter < max_iter:
+        
+            if (np.linalg.norm(dx) < rel_tol) and (counter >= min_iter):
+                break
             
             dx_prev = dx
             
@@ -432,7 +438,11 @@ def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
                                        return_sol=True,eps=eps,exception=exception)
             
             if np.linalg.norm(dx_prev) < np.linalg.norm(dx):
-                alpha /= 1.3
+                alpha /= 2
+                
+            if np.linalg.norm(dx) < np.linalg.norm(dx_smallest):
+                dx_smallest = dx
+                init_smallest = init
             
             #rel_err = np.amax(np.abs(sol[-1,:]-sol[0,:]))/np.amax(np.abs(sol))
             
@@ -460,12 +470,16 @@ def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
                 print('dx={:.2e}, al={:.2e}'.format(np.linalg.norm(dx),alpha))
             
             #print(counter,np.amax(np.abs(dx)),dx,rel_tol,k)
-            if counter == max_iter-1:
+            if counter == max_iter:
                 print('WARNING: max iter reached in newton call')
                 
     except KeyboardInterrupt:
         pass
-    return init
+    
+    if np.linalg.norm(dx_smallest) < np.linalg.norm(dx):
+        return init_smallest
+    else:
+        return init
 
 
 def get_newton_jac2(obj,fn,tLC,init,k=None,het_lams=None,return_sol=False,
@@ -495,10 +509,11 @@ def get_newton_jac2(obj,fn,tLC,init,k=None,het_lams=None,return_sol=False,
     n = len(init)
     
     J = np.zeros((n,n))
-    
+    #print('0')
     sol = solve_ivp(fn,[0,tLC[-1]],init,args=args,
-                    method=obj.method,dense_output=True,
-                    t_eval=tLC,rtol=obj.rtol,atol=obj.atol)
+                    method=obj.method,
+                    rtol=obj.rtol,atol=obj.atol)
+                    #dense_output=True, t_eval=tLC)
                     #rtol=obj.rtol,atol=obj.atol)
             
     sol_unpert = sol.y.T
@@ -522,10 +537,11 @@ def get_newton_jac2(obj,fn,tLC,init,k=None,het_lams=None,return_sol=False,
         pert[p] = eps
 
         pert_init = init + pert
+        #print('1',p)
         
         sol = solve_ivp(fn,[0,tLC[-1]],pert_init,args=args,
-                        method=obj.method,dense_output=True,
-                        t_eval=tLC,rtol=obj.rtol,atol=obj.atol)
+                        method=obj.method,rtol=obj.rtol,atol=obj.atol)
+                        #dense_output=True, t_eval=tLC)
         sol_pert_p = sol.y.T
         
         """
@@ -621,7 +637,7 @@ def load_sols(fnames):
     return data_list
 
 
-def generate_fnames(obj,model_pars=''):
+def generate_fnames(obj,model_pars='',coupling_pars=''):
     """
     each 'fnames' is a dict containing lists. for each key corresponding
     to the variables in obj.var_names, the list of names correspond
@@ -642,7 +658,7 @@ def generate_fnames(obj,model_pars=''):
     """
     
     # coupling parameters
-    c_pars = ''
+    c_pars = coupling_pars
     sim_pars = '_TN='+str(obj.TN)
     
     obj.monodromy_fname = obj.dir+'monodromy_'+model_pars+sim_pars+'.txt'
