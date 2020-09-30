@@ -16,6 +16,7 @@ coupling functions for thalamic neurons from RTSA Ermentrout, Park, Wilson 2019
 Notes:
     -PA requires endpoint=False. make sure corresponding dxAs are used.
 
+TODO: add backwards as an option for i,g,z.
 
 """
 import copy
@@ -67,22 +68,38 @@ class StrongCoupling(object):
     def __init__(self,rhs,coupling,LC_init,var_names,pardict,**kwargs):
 
         """
-        see the defaults dict below for allowed kwargs.
-        all model parameters must follow the convention
+        See the defaults dict below for allowed kwargs.
+        
+        All model parameters must follow the convention
         'parameter_val'. No other underscores should be used.
         the script splits the parameter name at '_' and uses the
         string to the left as the sympy parmeter name.
+        
+        Reserved names: ...
+        
+        g_forward: list or bool. If bool, integrate forwards or backwards
+            when computing g^k. If list, integrate g^k forwards or backwards
+            based on bool value g_forward[k]
+        z_forward: list or bool. Same idea as g_forward for PRCS
+        i_forward: list or bool. Same idea as g_forward for IRCS
+        
+        g_bad_dx: list or bool. If bool, use another variable to increase
+            the magnitude of the Newton derivative. This can only be
+            determined after attempting to run simulations and seeing that
+            the Jacobian for the Newton step is ill-conditioned. If list,
+            check for ill-conditioning for each order k.
+            For example, we use g_small_dx = [False,True,False,...,False]
+            for the thalamic model. The CGL model only needs
+            g_small_idx = False
+        z_bad_idx: same idea as g_small_idx for PRCs
+        i_bad_idx: same idea as g_small_idx for IRCs
         """
 
         defaults = {
             'trunc_order':3,
             
             'TN':20000,
-<<<<<<< HEAD
             'dir':None,
-=======
-            'dir':'dat',
->>>>>>> pA_fast
             
             'NA':500,
             'NB':500,
@@ -92,6 +109,13 @@ class StrongCoupling(object):
             'atol':1e-7,
             'rel_tol':1e-6,
             'method':'LSODA',
+            'g_forward':True,
+            'z_forward':True,
+            'i_forward':True,
+            
+            'g_bad_dx':False,
+            'z_bad_dx':False,
+            'i_bad_dx':False,
             
             'recompute_LC':False,
             'recompute_monodromy':False,
@@ -111,6 +135,7 @@ class StrongCoupling(object):
         self.rhs = rhs
         self.coupling = coupling
         self.LC_init = LC_init
+    
         
         self.rule_par = {}
         
@@ -118,6 +143,13 @@ class StrongCoupling(object):
         for (prop, default) in defaults.items():
             value = kwargs.get(prop, default)
             setattr(self, prop, value)
+        
+        assert((type(self.g_forward) is bool) or\
+               (type(self.g_forward) is list))
+        assert((type(self.z_forward) is bool) or\
+               (type(self.z_forward) is list))
+        assert((type(self.i_forward) is bool) or
+               (type(self.i_forward) is list))
         
         # update self with model parameters and save to dict
         self.pardict_sym = {}
@@ -256,7 +288,6 @@ class StrongCoupling(object):
         #home = expanduser("~")
         
         # filenames and directories
-<<<<<<< HEAD
         if self.dir is None:
             raise ValueError('Please define a data directory using \
                              the keyword argument \'dir\'.\
@@ -267,16 +298,11 @@ class StrongCoupling(object):
         elif self.dir.split('+')[0] == 'home':
             from pathlib import Path
             home = str(Path.home())
-            self.dir = home+self.dir.split('+')[1]
+            self.dir = home+'/'+self.dir.split('+')[1]
             
         else:
             self.dir = self.dir
         
-=======
-        from pathlib import Path
-        home = str(Path.home())
-        self.dir = home+'/thalamic_dat/'
->>>>>>> pA_fast
         print('Saving data to '+self.dir)
         
         if (not os.path.exists(self.dir)):
@@ -903,53 +929,45 @@ class StrongCoupling(object):
         
         uses Newtons method
         """
+        
+        if type(self.g_forward) is bool:
+            backwards = not(self.g_forward)
+        elif type(self.g_forward) is list:
+            backwards = not(self.g_forward[k])
+        else:
+            raise ValueError('g_forward must be bool or list, not',
+                             type(self.g_forward))
+        
         # load kth expansion of g for k >= 0
         if k == 0:
-            # g0 is 0. dot his to keep indexing simple.
-            
+            # g0 is 0. do this to keep indexing simple.
             return np.zeros((self.TN,len(self.var_names)))
         
         if k == 1:
             # pick correct normalization
-            #init = [0,self.g1_init[1],self.g1_init[2],self.g1_init[3]]
             init = copy.deepcopy(self.g1_init)
+            eps = 1e-4
         else:
             init = np.zeros(self.dim)
-            
-            # find intial condtion
-        backwards = False
-        if k == 1:
             eps = 1e-4
-            
-        else:
-            eps = 1e-4
-            
             init = lib.run_newton2(self,self.dg,init,k,het_vec,
                                   max_iter=20,eps=eps,
                                   rel_tol=self.rel_tol,rel_err=10,
                                   alpha=1,backwards=backwards)
         
         # get full solution
-        
         if backwards:
             tLC = -self.tLC
             
         else:
             tLC = self.tLC
         
-        if k == 1:
-            rtol = self.rtol
-            atol = self.atol
-        else:
-            rtol = self.rtol
-            atol = self.atol
-        
         sol = solve_ivp(self.dg,[0,tLC[-1]],
                         init,args=(k,het_vec),
                         t_eval=tLC,
                         method=self.method,
                         dense_output=True,
-                        rtol=rtol,atol=atol)
+                        rtol=self.rtol,atol=self.atol)
         
         if backwards:
             gu = sol.y.T[::-1,:]
@@ -1140,6 +1158,14 @@ class StrongCoupling(object):
         
     def generate_z(self,k,het_vec):
         
+        if type(self.g_forward) is bool:
+            backwards = not(self.g_forward)
+        elif type(self.g_forward) is list:
+            backwards = not(self.g_forward[k])
+        else:
+            raise ValueError('g_forward must be bool or list, not',
+                             type(self.g_forward))
+        
         if k == 0:
             init = copy.deepcopy(self.z0_init)
             eps = 1e-1
@@ -1147,36 +1173,32 @@ class StrongCoupling(object):
         else:
             init = np.zeros(self.dim)
             eps = 1e-4
-                
+            
             init = lib.run_newton2(self,self.dz,init,k,het_vec,
                                   max_iter=20,eps=eps,alpha=1,
                                   rel_tol=self.rel_tol,rel_err=10,
-                                  backwards=True)
+                                  backwards=backwards)
         
-        if k == 0:
-            rtol = 1e-13
-            atol = 1e-13
+        if backwards:
+            tLC = -self.tLC
+            
         else:
-            rtol = self.rtol
-            atol = self.atol
+            tLC = self.tLC
             
         sol = solve_ivp(self.dz,[0,-self.tLC[-1]],
                         init,args=(k,het_vec),
                         method=self.method,dense_output=True,
-                        t_eval=-self.tLC,
-                        rtol=rtol,atol=atol)
+                        t_eval=tLC,
+                        rtol=self.rtol,atol=self.atol)
+        
+        if backwards:
+            zu = sol.y.T[::-1,:]
             
-        zu = sol.y.T[::-1]
-        #zu = sol.y.T
+        else:
+            zu = sol.y.T
         
         if k == 0:
             # normalize
-            #v0,h0,r0,w0 = [self.LC['lam_v'](0),
-            #               self.LC['lam_h'](0),
-            #               self.LC['lam_r'](0),
-            #               self.LC['lam_w'](0)]
-            
-            #dLC = rhs(0,[v0,h0,r0,w0])
             dLC = self.rhs(0,self.LC_vec(0),self.pardict_val)
             zu = zu/(np.dot(dLC,zu[0,:]))
             
@@ -1259,56 +1281,51 @@ class StrongCoupling(object):
 
         """
         
+        if type(self.i_forward) is bool:
+            backwards = not(self.i_forward)
+        elif type(self.i_forward) is list:
+            backwards = not(self.i_forward[k])
+        else:
+            raise ValueError('i_forward must be bool or list, not',
+                             type(self.i_forward))
+        
+        if type(self.i_bad_dx) is bool:
+            exception = self.i_bad_dx
+        elif type(self.i_bad_dx) is list:
+            exception = self.i_bad_dx[k]
+        else:
+            raise ValueError('i_bad_dx must be bool or list, not',
+                             type(self.i_bad_dx))
+        
         if k == 0:
             init = copy.deepcopy(self.i0_init)
             eps = 1e-2
-            exception=False
-            
         else:
-            
             init = np.zeros(self.dim)
-        
-            if k == 1:
-                exception = True
-                eps = 1e-1
-            else:
-                exception = False
-                eps = 1e-4
-                
-                
+            eps = 1e-4
             init = lib.run_newton2(self,self.di,init,k,het_vec,
                                    max_iter=20,rel_tol=self.rel_tol,
                                    eps=eps,alpha=1.,
-                                   backwards=False,exception=exception)
-            
-        if k == 0:
-            rtol = 1e-13
-            atol = 1e-13
-        else:
-            rtol = self.rtol
-            atol = self.atol
-            
+                                   backwards=backwards,exception=exception)
+
+            init = np.zeros(self.dim)
+        
         sol = solve_ivp(self.di,[0,-self.tLC[-1]],init,
                         args=(k,het_vec),
                         t_eval=-self.tLC,
                         method=self.method,dense_output=True,
-                        rtol=rtol,atol=atol)
+                        rtol=self.rtol,atol=self.atol)
     
         iu = sol.y.T[::-1,:]
         #iu = sol.y.T
         
         if k == 0:
-            
-            # normalize
+            # normalize. classic weak coupling theory normalization
             c = np.dot(self.g1_init,iu[0,:])
-            #print('g1 init',self.g1_init)
-            #print('iu[0,:]',iu[0,:])
-            #print('i0 init',self.i0_init)
-            #print('constant dot',c)
             iu /= c
     
         if k == 1:  # normalize
-            
+            # see Wilson 2020 PRE for normalization formula.
             LC0 = []
             g10 = []
             z00 = []
@@ -1331,7 +1348,6 @@ class StrongCoupling(object):
             
             ijg = np.dot(i0,np.dot(J,g1))
             be = (self.kappa_val - ijg - np.dot(i1,F))/(np.dot(z0,F))
-            
             
             init = iu[0,:] + be*z0
             

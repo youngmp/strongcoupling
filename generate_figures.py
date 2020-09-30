@@ -5,7 +5,7 @@ Generate figures for strong coupling paper
 #from decimal import Decimal
 #from matplotlib.collections import PatchCollection
 import os
-#import matplotlib.gridspec as gridspec
+import matplotlib.gridspec as gridspec
 import numpy as np
 import time
 import matplotlib
@@ -123,21 +123,25 @@ def cgl_h():
               'recompute_p_sym':False,
               'recompute_p':False,
               'recompute_h_sym':False,
-              'recompute_h':False,
+              'recompute_h':True,
               'trunc_order':9,
               'dir':'cgl_dat/',
-              'NA':501,
-              'NB':501,
-              'p_iter':25,
-              'TN':2001,
+              'NA':1000,
+              'NB':1000,
+              'p_iter':5,
+              'TN':20000,
               'rtol':1e-7,
               'atol':1e-7,
               'rel_tol':1e-6,
               'method':'LSODA',
-              'load_all':False}
+              'load_all':True}
+    
+
     
     T_init = 2*np.pi
     LC_init = np.array([1,0,T_init])
+
+    a = StrongCoupling(CGL.rhs,CGL.coupling,LC_init,var_names,pardict,**kwargs)
 
     kwargs['d_val'] = d1
     a1 = StrongCoupling(CGL.rhs,CGL.coupling,LC_init,
@@ -204,11 +208,12 @@ def cgl_h():
             upper_idx = 11
             axins.plot(x[:upper_idx],h2[:upper_idx],color='k')
             axins.set_xlim(0,np.amax(x[:upper_idx]))
-            axins.set_ylim(np.amin(h2[:upper_idx])-.05,np.amax(h2[:upper_idx])+.05)
+            axins.set_ylim(np.amin(h2[:upper_idx])-.05,
+                           np.amax(h2[:upper_idx])+.05)
             axins.plot([0,2*np.pi],[0,0],color='gray',lw=.5,zorder=-1)
 
-            #axins.scatter(Us[c_idxs],np.zeros(len(Us[c_idxs])),color='k',zorder=6,s=6)    
-            mark_inset(axs[1,i], axins, loc1=2, loc2=1, fc="none", ec='0.5',alpha=0.5)
+            mark_inset(axs[1,i], axins, loc1=2, loc2=1,
+                       fc="none", ec='0.5',alpha=0.5)
 
             axins.set_xticks([])
             axins.set_yticks([])
@@ -343,7 +348,8 @@ def cgl_2par(recompute_2par=False,recompute_all=False):
         
     # ground truth
     ax.plot([0,2],[0,0],color=color_true,lw=lw_true)
-    ax.plot(d_vals,es_true,color=color_true,lw=lw_true,label='Analytic',zorder=-2)
+    ax.plot(d_vals,es_true,color=color_true,lw=lw_true,
+            label='Analytic',zorder=-2)
     ax.plot(d_vals,ea_true,color=color_true,lw=lw_true,zorder=-2,ls='--')
 
     # 2nd order
@@ -355,10 +361,14 @@ def cgl_2par(recompute_2par=False,recompute_all=False):
     e_temp2 = np.append(ea_true[d_vals<=1],es_true[d_vals>1])
 
     ec = '0.85'
-    ax.fill_between(d_vals,es_true,facecolor='1',edgecolor=ec,zorder=-5,hatch='++',label='10th Order')
-    ax.fill_between(d_vals,ea_true,facecolor='1',edgecolor=ec,zorder=-5,hatch='oo')
-    ax.fill_between(d_vals,e_temp1,-1,facecolor='1',edgecolor=ec,zorder=-5,hatch='///')
-    ax.fill_between(d_vals,e_temp2,1,facecolor='1',edgecolor=ec,zorder=-5,hatch='///')
+    ax.fill_between(d_vals,es_true,facecolor='1',
+                    edgecolor=ec,zorder=-5,hatch='++',label='10th Order')
+    ax.fill_between(d_vals,ea_true,facecolor='1',
+                    edgecolor=ec,zorder=-5,hatch='oo')
+    ax.fill_between(d_vals,e_temp1,-1,facecolor='1',
+                    edgecolor=ec,zorder=-5,hatch='///')
+    ax.fill_between(d_vals,e_temp2,1,facecolor='1',
+                    edgecolor=ec,zorder=-5,hatch='///')
     
     
     # label regions
@@ -540,8 +550,6 @@ def thalamic_diffs(ax,a,eps,recompute=False,Tf=0):
             
         #ax.plot(data[:,2]-data[:,1],data[:,0],color='k',lw=1)
         ax.plot(phi2,t,color='k',lw=1)
-        #ax.plot(t,data[:,2]-np.linspace(0,data[-1,0],len(data[:,0])),color='k',lw=1)
-        
         #print(fname)
         #ax.plot(data[:,0],data[:,1],color='k',lw=1)
         ax.set_ylim(data[:,0][-1],data[:,0][0])
@@ -877,7 +885,7 @@ def main():
     # listed in order of Figures in paper
     figures = [
         (cgl_h,[],['cgl_h.pdf','cgl_h.png']),
-        (cgl_2par,[],['cgl_2par.pdf','cgl_2par.png']),
+        #(cgl_2par,[],['cgl_2par.pdf','cgl_2par.png']),
         
         #(thalamic_h,[],['thal_h.pdf','thal_h.png']),
         #(thalamic_1par,[],['thal_1par.pdf']),

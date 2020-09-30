@@ -22,14 +22,11 @@ TODO:
 
 # user-defined
 
-import matplotlib
+#import matplotlib
 import numpy as np
 from sympy import Matrix
 
 from StrongCoupling import StrongCoupling
-
-matplotlib.rcParams.update({'figure.max_open_warning': 0})
-
 
 def rhs(t,z,pdict,option='value'):
     """
@@ -39,8 +36,8 @@ def rhs(t,z,pdict,option='value'):
 
     Returns
     -------
-    right-hand side equauation in terms of the inputs. if x,y scalars, return scalar.
-    if x,y, sympy symbols, return symbol.
+    right-hand side equauation in terms of the inputs. if x,y scalars,
+    return scalar. If x,y, sympy symbols, return symbol.
     """
     
     x,y = z
@@ -58,7 +55,7 @@ def coupling(vars_pair,pdict,option='value'):
         r^(2n) to r^n function. default parameter order is from perspective of
         first oscillator.
         
-        in this case the input is (x1,y1,x2,y2) and the output is an r2 vec.
+        in this case the input is (x1,y1,x2,y2) and the output is an R^2 vec.
         """
         x1,y1,x2,y2 = vars_pair
         
@@ -78,27 +75,28 @@ def main():
                'eps_val':0,
                'd_val':1}
     
-    kwargs = {'recompute_LC':True,
-              'recompute_monodromy':True,
-              'recompute_g_sym':True,
+    kwargs = {'recompute_LC':False,
+              'recompute_monodromy':False,
+              'recompute_g_sym':False,
               'recompute_g':True,
-              'recompute_het_sym':True,
+              'recompute_het_sym':False,
               'recompute_z':True,
               'recompute_i':True,
-              'recompute_k_sym':True,
-              'recompute_p_sym':True,
+              'recompute_k_sym':False,
+              'recompute_p_sym':False,
               'recompute_p':True,
-              'recompute_h_sym':True,
+              'recompute_h_sym':False,
               'recompute_h':True,
+              'g_forward':False,
               'dir':'cgl_dat/',
-              'trunc_order':2,
+              'trunc_order':9,
               'NA':501,
               'NB':501,
               'p_iter':25,
               'TN':20000,
-              'rtol':1e-7,
-              'atol':1e-7,
-              'rel_tol':1e-6,
+              'rtol':1e-13,
+              'atol':1e-13,
+              'rel_tol':1e-10,
               'method':'LSODA',
               'load_all':True}
     

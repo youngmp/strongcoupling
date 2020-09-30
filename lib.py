@@ -186,6 +186,7 @@ def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
     
     #smallest_init = np.zeros(len(init))+10
     dx_smallest = np.zeros(len(init))+10
+    init_smallest = init
     
     try:
      
@@ -491,7 +492,6 @@ def generate_fnames(obj,model_pars='',coupling_pars=''):
                                +model_pars
                                +c_pars
                                +'_NA='+str(obj.NA)
-                               +'_NB='+str(obj.NB)
                                +'_piter='+str(obj.p_iter)
                                +'.txt')
                               for i in range(obj.miter)]

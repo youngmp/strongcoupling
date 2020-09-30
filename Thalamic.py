@@ -101,6 +101,7 @@ def main():
               'recompute_p':True,
               'recompute_h_sym':True,
               'recompute_h':True,
+              'i_bad_dx':True,
               'trunc_order':2,
               'dir':'home+thalamic_dat/',
               'NA':1001,
