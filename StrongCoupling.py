@@ -78,7 +78,11 @@ class StrongCoupling(object):
             'trunc_order':3,
             
             'TN':20000,
+<<<<<<< HEAD
             'dir':None,
+=======
+            'dir':'dat',
+>>>>>>> pA_fast
             
             'NA':500,
             'NB':500,
@@ -252,6 +256,7 @@ class StrongCoupling(object):
         #home = expanduser("~")
         
         # filenames and directories
+<<<<<<< HEAD
         if self.dir is None:
             raise ValueError('Please define a data directory using \
                              the keyword argument \'dir\'.\
@@ -267,6 +272,11 @@ class StrongCoupling(object):
         else:
             self.dir = self.dir
         
+=======
+        from pathlib import Path
+        home = str(Path.home())
+        self.dir = home+'/thalamic_dat/'
+>>>>>>> pA_fast
         print('Saving data to '+self.dir)
         
         if (not os.path.exists(self.dir)):
