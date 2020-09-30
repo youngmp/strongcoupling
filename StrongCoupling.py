@@ -1,11 +1,8 @@
-# file for comparing to CGL. implement adjoint methods in Wilson 2020
-
-# https://stackoverflow.com/questions/49306092/...
-#parsing-a-symbolic-expression-that-includes-user-defined-functions-in-sympy
-
-# TODO: note heterogeneous terms in right-hand sides are hard-coded.
-
 """
+Created on Tue Sep 29 21:03:58 2020
+
+@author: Youngmin Park
+
 The logical flow of the class follows the paper by Wilson 2020.
 -produce heterogeneous terms for g for arbirary dx
 -substitute dx with g=g0 + psi*g1 + psi^2*g2+...
@@ -19,95 +16,78 @@ coupling functions for thalamic neurons from RTSA Ermentrout, Park, Wilson 2019
 Notes:
     -PA requires endpoint=False. make sure corresponding dxAs are used.
 
-"""
 
-# user-defined
-import MatchingLib as lib
+"""
+import copy
+import lib_sym as slib
+
+import lib
 from interp_basic import interp_basic as interpb
 from interp2d_basic import interp2d_basic as interp2db
 from lam_vec import lam_vec
-import SymLib as slib
 
-import inspect
+
+#import inspect
 import time
 import os
+
 import math
-import copy
-import dill
-import copy
-import matplotlib
-import math
-import sys
-import multiprocessing as multip
+#import sys
+#import multiprocessing as multip
 import tqdm
-from pathos.pools import ProcessPool
+#from pathos.pools import ProcessPool
 from pathos.pools import _ProcessPool
-#from pathos.helpers import 
-#from pathos.multiprocessing import ProcessingPool as Pool
 
 import scipy.interpolate as si
 import numpy as np
-import scipy as sp
+#import scipy as sp
 import sympy as sym
 import matplotlib.pyplot as plt
 
-from mpl_toolkits.mplot3d import Axes3D
-from sympy import Matrix, symbols,diff, pi, Sum, Indexed, collect, expand
-#from sympy import Function
+import dill
+
+from sympy import Matrix, symbols, Sum, Indexed, collect, expand
 from sympy import sympify as s
 from sympy.physics.quantum import TensorProduct as kp
 from sympy.utilities.lambdify import lambdify, implemented_function
-from sympy.utilities.autowrap import ufuncify
-#from sympy.interactive import init_printing
 
 imp_fn = implemented_function
 
 #from interpolate import interp1d
-from scipy.interpolate import interp1d#, interp2d
-from scipy.interpolate import interp2d, Rbf
-from scipy.integrate import solve_ivp, quad
+#from scipy.interpolate import interp1d#, interp2d
+from scipy.interpolate import interp2d
+from scipy.integrate import solve_ivp
 
-matplotlib.rcParams.update({'figure.max_open_warning': 0})
-
-
-class Thalamic(object):
+class StrongCoupling(object):
     """
     Thalamic model from RSTA 2019
     Requires sympy, numpy, matplotlib.
     """
     
-    def __init__(self,**kwargs):
+    def __init__(self,rhs,coupling,LC_init,var_names,pardict,**kwargs):
 
         """
-        recompute_g_sym : recompute heterogenous terms for Floquet e.funs g
-        
+        see the defaults dict below for allowed kwargs.
+        all model parameters must follow the convention
+        'parameter_val'. No other underscores should be used.
+        the script splits the parameter name at '_' and uses the
+        string to the left as the sympy parmeter name.
         """
 
         defaults = {
-            'gL_val':0.05,
-            'gna_val':3,
-            'gk_val':5,
-            'gt_val':5,
-            'eL_val':-70,
-            'ena_val':50,
-            'ek_val':-90,
-            'et_val':0,
-            'esyn_val':0,
-            'c_val':1,
-            'alpha_val':3,
-            'beta_val':2,
-            'sigmat_val':0.8,
-            'vt_val':-20,
-            'ib_val':3.5,
-
             'trunc_order':3,
             
             'TN':20000,
-            'dir':'dat',
+            'dir':None,
             
             'NA':500,
             'NB':500,
             'p_iter':25,
+            
+            'rtol':1e-7,
+            'atol':1e-7,
+            'rel_tol':1e-6,
+            'method':'LSODA',
             
             'recompute_LC':False,
             'recompute_monodromy':False,
@@ -124,91 +104,130 @@ class Thalamic(object):
             'load_all':True,
             }
         
+        self.rhs = rhs
+        self.coupling = coupling
+        self.LC_init = LC_init
         
+        self.rule_par = {}
+        
+        # if no kwarg for default, use default. otherwise use input kwarg.
         for (prop, default) in defaults.items():
-            setattr(self, prop, kwargs.get(prop, default))
+            value = kwargs.get(prop, default)
+            setattr(self, prop, value)
+        
+        # update self with model parameters and save to dict
+        self.pardict_sym = {}
+        self.pardict_val = {}
+        for (prop, value) in pardict.items():
+            
+            # define sympy names, and parameter replacement rule.
+            if prop.split('_')[-1] == 'val':
+                parname = prop.split('_')[0]
+                
+                # save parname_val
+                setattr(self,prop,value)
+                
+                # sympy name using parname
+                symvar = symbols(parname)
+                setattr(self,parname,symvar)
+                
+                # define replacement rule for parameters
+                # i.e. parname (sympy) to parname_val (float/int)
+                self.rule_par.update({symvar:value})
+                self.pardict_sym.update({parname:symvar})
+                self.pardict_val.update({parname:value})
+    
 
         # variable names
-        self.var_names = ['v','h','r','w']
+        self.var_names = var_names
         self.dim = len(self.var_names)
         
-        # misc variables
+        # max iter number
         self.miter = self.trunc_order+1
 
         # Symbolic variables and functions
         self.eye = np.identity(self.dim)
-        self.psi, self.eps, self.kap_sym = sym.symbols('psi eps kdap_sym')
-        
-        self.rtol = 1e-11
-        self.atol = 1e-11
-        self.method = 'LSODA'
-        self.rel_tol = 1e-9
-        
-        # parameters
-        self.c = symbols('c')
-        self.alpha, self.beta = symbols('alpha beta')
-        self.vt, self.sigmat = symbols('vt sigmat')
-        self.gL, self.eL = symbols('gL eL')
-        self.gna, self.ena = symbols('gna, ena')
-        self.gk, self.ek = symbols('gk ek')
-        self.gt, self.et = symbols('gt et')
-        self.esyn, self.ib = symbols('esyn ib')
+        self.psi, self.eps, self.kappa = sym.symbols('psi eps kappa')
         
         
-        self.rule_par = {self.c:self.c_val,
-                         self.alpha:self.alpha_val,
-                         self.beta:self.beta_val,
-                         self.vt:self.vt_val,
-                         self.sigmat:self.sigmat_val,
-                         self.gL:self.gL_val,
-                         self.eL:self.eL_val,
-                         self.gna:self.gna_val,
-                         self.ena:self.ena_val,
-                         self.gk:self.gk_val,
-                         self.ek:self.ek_val,
-                         self.esyn:self.esyn_val,
-                         self.gt:self.gt_val,
-                         self.et:self.et_val}
+        # single-oscillator variables and coupling variables.
+        # single oscillator vars use the names from var_names
+        # A and B are appended to coupling variables
+        # to denote oscillator 1 and 2.
         
-
-        # single-oscillator variables
-        self.v, self.h, self.r, self.w, self.t, self.s = symbols('v h r w t s')
-        self.tA, self.tB, = symbols('tA tB')
-        self.dv, self.dh, self.dr, self.dw = symbols('dv dh dr dw')
+        self.vars = []
+        self.A_vars = []
+        self.B_vars = []
+        
+        self.dA_vars = []
+        self.dB_vars = []
+        
+        #self.A_pair = Matrix([[self.vA,self.hA,self.rA,self.wA,
+        #                       self.vB,self.hB,self.rB,self.wB]])
+        self.A_pair = sym.zeros(1,2*self.dim)
+        self.B_pair = sym.zeros(1,2*self.dim)
+        
+        self.dA_pair = sym.zeros(1,2*self.dim)
+        self.dB_pair = sym.zeros(1,2*self.dim)
+        
+        self.dx_vec = sym.zeros(1,self.dim) 
+        self.x_vec = sym.zeros(self.dim,1)
+        
+        #Matrix([[self.dv,self.dh,self.dr,self.dw]])
+        #Matrix([[self.v],[self.h],[self.r],[self.w]])
+        
+        for i,name in enumerate(var_names):
+            # save var1, var2, ..., varN
+            symname = symbols(name)
+            setattr(self, name, symname)
+            self.vars.append(symname)
+            self.x_vec[i] = symname
+            
+            # save dvar1, dvar2, ..., dvarN
+            symd = symbols('d'+name)
+            setattr(self, 'd'+name, symd)
+            self.dx_vec[i] = symd
+            
+            # save var1A, var2A, ..., varNA,
+            #      var1B, var2B, ..., varNB
+            symA = symbols(name+'A')
+            symB = symbols(name+'B')
+            setattr(self, name+'A', symA)
+            setattr(self, name+'B', symB)
+            self.A_vars.append(symA)
+            self.B_vars.append(symB)
+            
+            self.A_pair[:,i] = Matrix([[symA]])
+            self.A_pair[:,i+self.dim] = Matrix([[symB]])
+            
+            self.B_pair[:,i] = Matrix([[symB]])
+            self.B_pair[:,i+self.dim] = Matrix([[symA]])
+            
+            symdA = symbols('d'+name+'A')
+            symdB = symbols('d'+name+'B')
+            setattr(self, 'd'+name+'A', symdA)
+            setattr(self, 'd'+name+'B', symdB)
+            
+            self.dA_vars.append(symdA)
+            self.dB_vars.append(symdB)
+            
+            self.dA_pair[:,i] = Matrix([[symdA]])
+            self.dA_pair[:,i+self.dim] = Matrix([[symdB]])
+            
+            self.dB_pair[:,i] = Matrix([[symdB]])
+            self.dB_pair[:,i+self.dim] = Matrix([[symdA]])
+            
+            
+            
+        self.t = symbols('t')
+        self.tA, self.tB = symbols('tA tB')
+        
+        
+        #self.dv, self.dh, self.dr, self.dw = symbols('dv dh dr dw')
         
         # coupling variables
-        self.thA, self.psiA, self.thB, self.psiB = symbols('thA psiA thB psiB')
-        
-        self.vA, self.hA, self.rA, self.wA = symbols('vA hA rA wA')
-        self.vB, self.hB, self.rB, self.wB = symbols('vB hB rB wB')
-
-        self.dvA, self.dhA, self.drA, self.dwA = symbols('dvA dhA drA dwA')
-        self.dvB, self.dhB, self.drB, self.dwB = symbols('dvB dhB drB dwB')
-
-        self.vars = [self.v,self.h,self.r,self.w]
-        self.A_vars = [self.vA,self.hA,self.rA,self.wA]
-        self.dA_vars = [self.dvA,self.dhA,self.drA,self.dwA]
-        
-        self.B_vars = [self.vB,self.hB,self.rB,self.wB]
-        self.dB_vars = [self.dvB,self.dhB,self.drB,self.dwB]
-        
-        self.A_pair = Matrix([[self.vA,self.hA,self.rA,self.wA,
-                               self.vB,self.hB,self.rB,self.wB]])
-        
-        self.dA_pair = Matrix([[self.dvA,self.dhA,self.drA,self.dwA,
-                                self.dvB,self.dhB,self.drB,self.dwB]])
-        
-        self.B_pair = Matrix([[self.vB,self.hB,self.rB,self.wB,
-                               self.vA,self.hA,self.rA,self.wA]])
-        
-        self.dB_pair = Matrix([[self.dvB,self.dhB,self.drB,self.dwB,
-                                self.dvA,self.dhA,self.drA,self.dwA]])
-        
-        #self.derivs = {'v':self.dv,'h':self.dh,'r':self.dr,'w':self.dw}
-        
-        self.dx_vec = Matrix([[self.dv,self.dh,self.dr,self.dw]])
-        self.x_vec = Matrix([[self.v],[self.h],[self.r],[self.w]])
-        
+        self.thA, self.psiA = symbols('thA psiA')
+        self.thB, self.psiB = symbols('thB psiB')
         
         # function dicts
         # individual functions
@@ -229,41 +248,48 @@ class Thalamic(object):
         self.hodd = {}
         self.het2 = {}
         
-        from os.path import expanduser
-        home = expanduser("~")
+        #from os.path import expanduser
+        #home = expanduser("~")
         
         # filenames and directories
-        from pathlib import Path
-        home = str(Path.home())
-        self.dir = home+'/thalamic_dat/'
+        if self.dir is None:
+            raise ValueError('Please define a data directory using \
+                             the keyword argument \'dir\'.\
+                             Write dir=\'home+file\' to save to file in the\
+                             home directory. Write dir=\'file\' to save to\
+                             file in the current working directory.')
+            
+        elif self.dir.split('+')[0] == 'home':
+            from pathlib import Path
+            home = str(Path.home())
+            self.dir = home+self.dir.split('+')[1]
+            
+        else:
+            self.dir = self.dir
+        
+        print('Saving data to '+self.dir)
         
         if (not os.path.exists(self.dir)):
             os.makedirs(self.dir)
         
-        if self.ib_val != 3.5:
-            lib.generate_fnames(self,model_pars='_ib='+str(self.ib_val))
-        else:
-            lib.generate_fnames(self)
-        #self.generate_fnames()
+        lib.generate_fnames(self)
         
         # make rhs callable
-        self.rhs_sym = self.thal_rhs(0,self.vars,option='sym')
+        #self.rhs_sym = self.thal_rhs(0,self.vars,option='sym')
+        self.rhs_sym = rhs(0,self.vars,self.pardict_sym,
+                                option='sym')
         
         #print('jac sym',self.jac_sym[0,0])
         self.load_limit_cycle()
+        
+        #print(self.LC_vec(10))
         
         
         self.A_array,self.dxA = np.linspace(0,self.T,self.NA,
                                             retstep=True,
                                             endpoint=True)
-        self.B_array,self.dxB = np.linspace(0,self.T,self.NB,
-                                            retstep=True,
-                                            endpoint=True)
         
         self.Aarr_noend,self.dxA_noend = np.linspace(0,self.T,self.NA,
-                                                     retstep=True,
-                                                     endpoint=False)
-        self.Barr_noend,self.dxB_noend = np.linspace(0,self.T,self.NB,
                                                      retstep=True,
                                                      endpoint=False)
         
@@ -285,7 +311,7 @@ class Thalamic(object):
             
             # get heterogeneous terms for g, floquet e. fun.
             self.load_g_sym()
-                
+            
             # get g
             self.load_g()
             
@@ -305,111 +331,32 @@ class Thalamic(object):
             self.load_h_sym()
             self.load_h()
         
-            
-            
         
-    def thal_rhs(self,t,z,option='val'):
+    def monodromy(self,t,z):
         """
-        right-hand side of the equation of interest. thalamic neural model.
-        """
+        calculate right-hand side of system
+        \dot \Phi = J\Phi, \Phi(0)=I
+        \Phi is a matrix solution
         
-        v, h, r, w = z
-        
-        v *= 100
-        r /= 100
-        
-        if option == 'val':
-            gL = self.gL_val
-            eL = self.eL_val
-            gna = self.gna_val
-            ena = self.ena_val
-            gk = self.gk_val
-            ek = self.ek_val
-            gt = self.gt_val
-            et = self.et_val
-            c = self.c_val
-            alpha = self.alpha_val
-            vt = self.vt_val
-            sigmat = self.sigmat_val
-            beta = self.beta_val
-            ib = self.ib_val
-            exp = np.exp
-
-        elif option == 'sym':
-            gL = self.gL
-            eL = self.eL
-            gna = self.gna
-            ena = self.ena
-            gk = self.gk
-            ek = self.ek
-            gt = self.gt
-            et = self.et
-            c = self.c
-            alpha = self.alpha
-            vt = self.vt
-            sigmat = self.sigmat
-            beta = self.beta
-            ib = self.ib
-            exp = sym.exp
-            
-        else:
-            raise ValueError('Unrecognized option',option)
-            
-        """
-        ah = 0.128*exp(-((v*100)+46)/18)  #
-        bh = 4/(1+exp(-((v*100)+23)/5))  #
-        
-        minf = 1/(1+exp(-((v*100)+37)/7))  #
-        hinf = 1/(1+exp(((v*100)+41)/4))  #
-        rinf = 1/(1+exp(((v*100)+84)/4))  #
-        pinf = 1/(1+exp(-((v*100)+60)/6.2))  #
-        
-        tauh = 1/(ah+bh)  #
-        taur = 28+exp(-((v*100)+25)/10.5)  #
-        
-        iL = gL*((v*100)-eL)  #
-        ina = gna*(minf**3)*h*((v*100)-ena)  #
-        ik = gk*((0.75*(1-h))**4)*((v*100)-ek)  #
-        it = gt*(pinf**2)*(r/100)*((v*100)-et)  #
-        ib = 3.5
-        
-        dv = (-iL-ina-ik-it+ib)/c
-        dh = (hinf-h)/tauh
-        dr = (rinf-(r/100))/taur
-        dw = alpha*(1-w)/(1+exp(-((v*100)-vt)/sigmat))-beta*w
+        jacLC is the jacobian evaluated along the limit cycle
         """
         
-        ah = 0.128*exp(-(v+46)/18)  #
-        bh = 4/(1+exp(-(v+23)/5))  #
+        jac = self.jacLC(t)
+        #LC_vec = np.array([self.LC['lam_v'](t),
+        #                   self.LC['lam_h'](t),
+        #                   self.LC['lam_r'](t),
+        #                   self.LC['lam_w'](t)])
         
-        minf = 1/(1+exp(-(v+37)/7))  #
-        hinf = 1/(1+exp((v+41)/4))  #
-        rinf = 1/(1+exp((v+84)/4))  #
-        pinf = 1/(1+exp(-(v+60)/6.2))  #
-        #print(pinf)
+        #jac = self.numerical_jac(rhs,self.LC_vec(t))
         
-        tauh = 1/(ah+bh)  #
-        taur = 28+exp(-(v+25)/10.5)  #
+        #print(jac)
+        n = int(np.sqrt(len(z)))
+        z = np.reshape(z,(n,n))
         
-        iL = gL*(v-eL)  #
-        ina = gna*(minf**3)*h*(v-ena)  #
-        ik = gk*((0.75*(1-h))**4)*(v-ek)  #
-        it = gt*(pinf**2)*r*(v-et)  #
+        #print(n)
+        dy = np.dot(jac,z)
         
-        
-        dv = (-iL-ina-ik-it+ib)/c
-        dh = (hinf-h)/tauh
-        dr = (rinf-r)/taur
-        dw = alpha*(1-w)/(1+exp(-(v-vt)/sigmat))-beta*w
-        #dw = alpha*(1-w)-beta*w
-        
-        if option == 'val':
-            return np.array([dv/100,dh,dr*100,dw])
-            #return np.array([dv,dh,dr])
-        else:
-            return Matrix([dv/100,dh,dr*100,dw])
-            #return Matrix([dv,dh,dr])
-
+        return np.reshape(dy,n*n)
 
     def numerical_jac(self,fn,x,eps=1e-7):
         """
@@ -431,13 +378,7 @@ class Thalamic(object):
         
         return J
         
-    def thal_coupling(self,vars_pair,option='val'):
-        vA, hA, rA, wA, vB, hB, rB, wB = vars_pair
-
-        if option == 'val':
-            return -np.array([wB*(vA-self.esyn_val),0,0,0])/self.c_val
-        else:
-            return -Matrix([wB*(vA-self.esyn),0,0,0])/self.c
+    
 
     def generate_expansions(self):
         """
@@ -515,7 +456,7 @@ class Thalamic(object):
             
         self.LC_vec = lam_vec(lam_list)
             
-        if False:
+        if True:
             #print('lc init',self.LC['dat'][0,:])
             #print('lc final',self.LC['dat'][-1,:])
             fig, axs = plt.subplots(nrows=self.dim,ncols=1)
@@ -550,14 +491,18 @@ class Thalamic(object):
     def generate_limit_cycle(self):
         
         tol = 1e-13
-        T_init = 10.6
+        
         #T_init = 5.7
         eps = np.zeros(self.dim) + 1e-2
         epstime = 1e-4
         dy = np.zeros(self.dim+1)+10
 
+        #T_init = 10.6
+
         # rough init found using XPP
-        init = np.array([-.64,0.71,0.25,0,T_init])
+        init = self.LC_init
+        T_init = init[-1]
+        #np.array([-.64,0.71,0.25,0,T_init])
         #init = np.array([-.468,0.6,0.07,0,T_init])
         
         
@@ -569,9 +514,9 @@ class Thalamic(object):
         
         
         # run for a while to settle close to limit cycle
-        sol = solve_ivp(self.thal_rhs,[0,500],init[:-1],
+        sol = solve_ivp(self.rhs,[0,500],init[:-1],
                         method=self.method,dense_output=True,
-                        rtol=1e-13,atol=1e-13)
+                        rtol=1e-14,atol=1e-14,args=(self.pardict_val,))
         
         if False:
             fig, axs = plt.subplots(nrows=self.dim,ncols=1)
@@ -590,8 +535,6 @@ class Thalamic(object):
         maxidx = np.argmax(sol.y.T[int(.2*tn):,0])+int(.2*tn)
 
         
-        
-            
         init = np.append(sol.y.T[maxidx,:],T_init)
         
         #init = np.array([-4.65e+01,8.77e-01,4.68e-04,T_init])
@@ -622,13 +565,15 @@ class Thalamic(object):
                 initm = init[:-1] + pertm
                 
                 # get error in position estimate
-                solp = solve_ivp(self.thal_rhs,[0,t[-1]],initp,
+                solp = solve_ivp(self.rhs,[0,t[-1]],initp,
                                  method=self.method,
-                                 rtol=1e-13,atol=1e-13)
+                                 rtol=1e-13,atol=1e-13,
+                                 args=(self.pardict_val,))
                 
-                solm = solve_ivp(self.thal_rhs,[0,t[-1]],initm,
+                solm = solve_ivp(self.rhs,[0,t[-1]],initm,
                                  method=self.method,
-                                 rtol=1e-13,atol=1e-13)
+                                 rtol=1e-13,atol=1e-13,
+                                 args=(self.pardict_val,))
             
             
                 
@@ -646,25 +591,28 @@ class Thalamic(object):
             tm = np.linspace(0,init[-1]-epstime,self.TN)
             
             # get error in time estimate
-            solp = solve_ivp(self.thal_rhs,[0,tp[-1]],initp,
+            solp = solve_ivp(self.rhs,[0,tp[-1]],initp,
                              method=self.method,
-                             rtol=1e-13,atol=1e-13)
+                             rtol=1e-13,atol=1e-13,
+                             args=(self.pardict_val,))
             
-            solm = solve_ivp(self.thal_rhs,[0,tm[-1]],initm,
+            solm = solve_ivp(self.rhs,[0,tm[-1]],initm,
                              method=self.method,
-                             rtol=1e-13,atol=1e-13)
+                             rtol=1e-13,atol=1e-13,
+                             args=(self.pardict_val,))
             
             yp = solp.y.T
             ym = solm.y.T
             
             J[:-1,-1] = (yp[-1,:]-ym[-1,:])/(2*epstime)
             
-            J[-1,:] = np.append(self.thal_rhs(0,init[:-1]),0)
+            J[-1,:] = np.append(self.rhs(0,init[:-1],self.pardict_val),0)
             #print(J)
             
-            sol = solve_ivp(self.thal_rhs,[0,init[-1]],init[:-1],
+            sol = solve_ivp(self.rhs,[0,init[-1]],init[:-1],
                              method=self.method,
-                             rtol=1e-13,atol=1e-13)
+                             rtol=1e-13,atol=1e-13,
+                             args=(self.pardict_val,))
             
             y_final = sol.y.T[-1,:]
             
@@ -677,7 +625,7 @@ class Thalamic(object):
             print('LC rel. err =',np.linalg.norm(dy))
             
             
-            if True:
+            if False:
                 fig, axs = plt.subplots(nrows=self.dim,ncols=1)
                 
                 for i,ax in enumerate(axs):
@@ -704,10 +652,11 @@ class Thalamic(object):
         #                      0.438912900900591])
         
         # run finalized limit cycle solution
-        sol = solve_ivp(self.thal_rhs,[0,init[-1]],sol.y.T[peak_idx,:],
+        sol = solve_ivp(self.rhs,[0,init[-1]],sol.y.T[peak_idx,:],
                         method=self.method,
                         t_eval=np.linspace(0,init[-1],self.TN),
-                        rtol=1e-13,atol=1e-13)
+                        rtol=1e-13,atol=1e-13,
+                        args=(self.pardict_val,))
         
         #print('warning: lc init set by hand')
         #sol = solve_ivp(self.thal_rhs,[0,init[-1]],init[:-1],
@@ -732,8 +681,8 @@ class Thalamic(object):
             r,c = np.shape(initm)
             init = np.reshape(initm,r*c)
             
-            sol = solve_ivp(lib.monodromy2,[0,self.tLC[-1]],init,
-                            args=(self,),t_eval=self.tLC,
+            sol = solve_ivp(self.monodromy,[0,self.tLC[-1]],init,
+                            t_eval=self.tLC,
                             method=self.method,
                             rtol=1e-13,atol=1e-13)
             
@@ -764,7 +713,7 @@ class Thalamic(object):
         #print(self.min_lam_idx)
         #print(self.eigenvalues[self.min_lam_idx])
         self.lam = self.eigenvalues[self.min_lam_idx]  # floquet mult.
-        self.kappa = np.log(self.lam)/self.T  # floquet exponent
+        self.kappa_val = np.log(self.lam)/self.T  # floquet exponent
         
         if np.sum(self.eigenvectors[:,self.min_lam_idx]) < 0:
             self.eigenvectors[:,self.min_lam_idx] *= -1
@@ -799,7 +748,7 @@ class Thalamic(object):
         print('i0_init',self.i0_init)
         
         #print('Floquet Multiplier',self.lam)
-        print('* Floquet Exponent kappa =',self.kappa)
+        print('* Floquet Exponent kappa =',self.kappa_val)
         
         
         if False:
@@ -863,21 +812,6 @@ class Thalamic(object):
             print('* Loading g symbolic...')
             for key in self.var_names:
                 self.g['sym_'+key] = lib.load_dill(self.g['sym_fnames_'+key])
-                
-        """
-        rule_tmp = {Indexed('g'+key,1):1 for key in self.var_names}
-        rule_tmp3 = {Indexed('g'+key,2):2 for key in self.var_names}
-        
-        rule_tmp2 = {self.v:3,self.h:1.5,self.r:.1,self.w:1.2}
-        rule_tmp = {**rule_tmp,**self.rule_par,**rule_tmp2,**rule_tmp3}
-        print(rule_tmp)
-        expr_temp = self.g['sym_w'][2]
-        expr_temp = expr_temp.subs(rule_tmp)
-        print(sym.N(expr_temp))
-        lam_temp = lambdify(self.vars,expr_temp(*self.vars))
-        
-        print(lam_temp(1,1,1,1))
-        """
         
     
     def load_g(self):
@@ -909,7 +843,7 @@ class Thalamic(object):
             else:
                 data = np.loadtxt(fname)
                 
-            if False:
+            if True:
                 fig, axs = plt.subplots(nrows=self.dim,ncols=1)
                 
                 for j,ax in enumerate(axs):
@@ -918,8 +852,8 @@ class Thalamic(object):
                     ax.legend()
                     
                 axs[0].set_title('g'+str(i))
-                print('g'+str(i)+' init',data[0,:])
-                print('g'+str(i)+' final',data[-1,:])
+                print('g'+str(i)+' ini',data[0,:])
+                print('g'+str(i)+' fin',data[-1,:])
                 plt.tight_layout()
                 plt.show(block=True)
                 time.sleep(.1)
@@ -983,7 +917,7 @@ class Thalamic(object):
             init = lib.run_newton2(self,self.dg,init,k,het_vec,
                                   max_iter=20,eps=eps,
                                   rel_tol=self.rel_tol,rel_err=10,
-                                  alpha=1.1,backwards=backwards)
+                                  alpha=1,backwards=backwards)
         
         # get full solution
         
@@ -994,8 +928,8 @@ class Thalamic(object):
             tLC = self.tLC
         
         if k == 1:
-            rtol = 1e-13
-            atol = 1e-13
+            rtol = self.rtol
+            atol = self.atol
         else:
             rtol = self.rtol
             atol = self.atol
@@ -1153,7 +1087,7 @@ class Thalamic(object):
             else:
                 data = np.loadtxt(fname)
                 
-            if False:
+            if True:
                 fig, axs = plt.subplots(nrows=self.dim,ncols=1)
                 
                 for j,ax in enumerate(axs):
@@ -1161,8 +1095,8 @@ class Thalamic(object):
                     ax.plot(self.tLC,data[:,j],label=key)
                     ax.legend()
                 
-                print('z'+str(i)+' init',data[0,:])
-                print('z'+str(i)+' final',data[-1,:])
+                print('z'+str(i)+' ini',data[0,:])
+                print('z'+str(i)+' fin',data[-1,:])
                 axs[0].set_title('z'+str(i))
                 plt.tight_layout()
                 plt.show(block=True)
@@ -1205,7 +1139,7 @@ class Thalamic(object):
             eps = 1e-4
                 
             init = lib.run_newton2(self,self.dz,init,k,het_vec,
-                                  max_iter=20,eps=eps,alpha=1.1,
+                                  max_iter=20,eps=eps,alpha=1,
                                   rel_tol=self.rel_tol,rel_err=10,
                                   backwards=True)
         
@@ -1227,12 +1161,13 @@ class Thalamic(object):
         
         if k == 0:
             # normalize
-            v0,h0,r0,w0 = [self.LC['lam_v'](0),
-                           self.LC['lam_h'](0),
-                           self.LC['lam_r'](0),
-                           self.LC['lam_w'](0)]
+            #v0,h0,r0,w0 = [self.LC['lam_v'](0),
+            #               self.LC['lam_h'](0),
+            #               self.LC['lam_r'](0),
+            #               self.LC['lam_w'](0)]
             
-            dLC = self.thal_rhs(0,[v0,h0,r0,w0])
+            #dLC = rhs(0,[v0,h0,r0,w0])
+            dLC = self.rhs(0,self.LC_vec(0),self.pardict_val)
             zu = zu/(np.dot(dLC,zu[0,:]))
             
         return zu
@@ -1265,7 +1200,7 @@ class Thalamic(object):
             else:
                 data = np.loadtxt(fname)
                 
-            if False:
+            if True:
                 fig, axs = plt.subplots(nrows=self.dim,ncols=1)
                 
                 for j,ax in enumerate(axs):
@@ -1273,8 +1208,8 @@ class Thalamic(object):
                     ax.plot(self.tLC,data[:,j],label=key)
                     ax.legend()
                     
-                print('i'+str(i)+' init',data[0,:])
-                print('i'+str(i)+' final',data[-1,:])
+                print('i'+str(i)+' ini',data[0,:])
+                print('i'+str(i)+' fin',data[-1,:])
                 axs[0].set_title('i'+str(i))
                 plt.tight_layout()
                 plt.show(block=True)
@@ -1333,7 +1268,7 @@ class Thalamic(object):
                 
             init = lib.run_newton2(self,self.di,init,k,het_vec,
                                    max_iter=20,rel_tol=self.rel_tol,
-                                   eps=eps,alpha=1.1,
+                                   eps=eps,alpha=1.,
                                    backwards=False,exception=exception)
             
         if k == 0:
@@ -1356,47 +1291,36 @@ class Thalamic(object):
             
             # normalize
             c = np.dot(self.g1_init,iu[0,:])
-            print('g1 init',self.g1_init)
-            print('iu[0,:]',iu[0,:])
-            print('i0 init',self.i0_init)
-            print('constant dot',c)
+            #print('g1 init',self.g1_init)
+            #print('iu[0,:]',iu[0,:])
+            #print('i0 init',self.i0_init)
+            #print('constant dot',c)
             iu /= c
     
         if k == 1:  # normalize
             
-            F = self.thal_rhs(0,[self.LC['lam_v'](0),
-                                 self.LC['lam_h'](0),
-                                 self.LC['lam_r'](0),
-                                 self.LC['lam_w'](0)])
-            
-            g1 = np.array([self.g['lam_v'][1](0),
-                           self.g['lam_h'][1](0),
-                           self.g['lam_r'][1](0),
-                           self.g['lam_w'][1](0)])
-            
-            z0 = np.array([self.z['lam_v'][0](0),
-                           self.z['lam_h'][0](0),
-                           self.z['lam_r'][0](0),
-                           self.z['lam_w'][0](0)])
-            
-            i0 = np.array([self.i['lam_v'][0](0),
-                           self.i['lam_h'][0](0),
-                           self.i['lam_r'][0](0),
-                           self.i['lam_w'][0](0)])
+            LC0 = []
+            g10 = []
+            z00 = []
+            i00 = []
+        
+            for varname in self.var_names:
+                key = 'lam_'+varname
+                LC0.append(self.LC[key](0))
+                g10.append(self.g[key][1](0))
+                z00.append(self.z[key][0](0))
+                i00.append(self.i[key][0](0))
+                
+            F = self.rhs(0,LC0,self.pardict_val)
+            g1 = np.array(g10)
+            z0 = np.array(z00)
+            i0 = np.array(i00)
             
             J = self.jacLC(0)
             i1 = iu[0,:]
             
             ijg = np.dot(i0,np.dot(J,g1))
-            be = (self.kappa - ijg - np.dot(i1,F))/(np.dot(z0,F))
-            
-            print('actual',np.dot(F,i1))
-            print('expect',np.dot(i0,np.dot(self.kappa*self.eye-J,g1)))
-            print('canchg',z0)
-            print('amtchg',np.dot(F,z0))
-            print('mymult',be)
-            print('i1 unnormalized init',i1)
-            
+            be = (self.kappa_val - ijg - np.dot(i1,F))/(np.dot(z0,F))
             
             
             init = iu[0,:] + be*z0
@@ -1505,8 +1429,11 @@ class Thalamic(object):
         # generate terms involving the coupling term (see K in paper).
         
         # find K_i^{j,k}
-        coupA = self.thal_coupling(self.A_pair,option='sym')
-        coupB = self.thal_coupling(self.B_pair,option='sym')
+        #coupA = self.thal_coupling(self.A_pair,option='sym')
+        #coupB = self.thal_coupling(self.B_pair,option='sym')
+
+        coupA = self.coupling(self.A_pair,self.pardict_sym,option='sym')
+        coupB = self.coupling(self.B_pair,self.pardict_sym,option='sym')
 
         #print('coupA',coupA)
         #print('coupB',coupB)
@@ -1603,7 +1530,14 @@ class Thalamic(object):
             if self.recompute_p or not(os.path.isfile(fname)):
                 print('* Computing p'+str(i)+'...')
                 start = time.time()
-                pA_data = self.generate_p(i)
+                
+                old = 0
+                if old:
+                    #print('old')
+                    pA_data = self.generate_p_old(i)
+                else:
+                    #print('new')
+                    pA_data = self.generate_p(i)
                 end = time.time()
                 print('time elapsed for p'+str(i)+' = '+str(end-start))
                 
@@ -1614,34 +1548,29 @@ class Thalamic(object):
                 pA_data = np.loadtxt(fname)
                 
             
-            if True:
+            if False:
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
                 
-                #ax.matshow(pA_data[190:,140:],cmap='viridis',aspect='auto')
                 ax.matshow(pA_data,cmap='viridis',aspect='auto')
-                #ax.set_xlim(0,self.NA[i])
                 
                 
                 ax.set_ylabel('B[::-1]')
                 ax.set_xlabel('A')
                 ax.set_title('pA data'+str(i)\
                              +' NA='+str(self.NA)\
-                             +' p_iter='+str(self.p_iter))
+                             +' piter='+str(self.p_iter))
                 plt.show(block=True)
                 plt.close()
             
             pA_interp = interp2d(self.Aarr_noend,
-                                 self.Barr_noend,
+                                 self.Aarr_noend,
                                  pA_data,bounds_error=False,
-                                 fill_value=None,kind='quintic')
+                                 fill_value=None,kind='cubic')
             
-            pA_interp2 = interp2db(pA_interp,self.T)
+            pA_interp = interp2db(pA_interp,self.T)
             
-            pA_imp = imp_fn('pA_'+str(i),self.fLam2(pA_interp2))
-            
-            #pA_imp = implemented_function('pA_'+str(i),
-            #                              self.myFunMod2A(pA_interp))
+            pA_imp = imp_fn('pA_'+str(i),self.fLam2(pA_interp))
             
             self.pA['dat'].append(pA_data)
             
@@ -1671,23 +1600,276 @@ class Thalamic(object):
         
         self.rule_p_AB = {**rule_pA,**rule_pB}
         
-    def generate_p(self,k):
         
-        import scipy as sp
+    def generate_p(self,k):
+        #import scipy as sp
         import numpy as np
+        
+        kappa = self.kappa_val
         
         ta = self.thA
         tb = self.thB
         
         NA = self.NA
-        NB = self.NB
+        dxA_noend = self.dxA_noend
+        #dxA = self.dxA
+        T = self.T
+        
+        p = self.pool
+        
+        if k == 0:
+            #pA0 is 0 (no forcing function)
+            return np.zeros((self.NA,self.NA))
+        
+        # put these implemented functions into the expansion
+        ruleA = {sym.Indexed('pA',i):
+                 self.pA['imp'][i](ta,tb) for i in range(k)}
+        ruleB = {sym.Indexed('pB',i):
+                 self.pA['imp'][i](tb,ta) for i in range(k)}
+        
+        
+        rule = {**ruleA, **ruleB,**self.rule_g_AB,
+                **self.rule_i_AB,**self.rule_LC_AB,
+                **self.rule_par}
+        
+        ph_impA = self.pA['sym'][k].subs(rule)
+        repl, redu = sym.cse(ph_impA)
+        
+        funs = []
+        syms = [ta,tb]
+        for i, v in enumerate(repl):
+            funs.append(lambdify(syms,v[1],modules='numpy'))
+            syms.append(v[0])
+        
+        glam = lambdify(syms,redu[0],modules='numpy')
+        
+        lam_hetA_data = np.zeros((NA,NA))
+        
+        A_array2 = self.Aarr_noend
+        B_array2 = self.Aarr_noend
+
+        print('compile 0')
+        for i in range(NA):
+            if i % 1000 == 0:
+                print(i)
+            ta2 = A_array2[i]*np.ones_like(B_array2)
+            tb2 = B_array2
+            
+            xs = [ta2,tb2]
+            
+            for f in funs:
+                xs.append(f(*xs))
+        
+            #lam_hetA_data[:,i] = lam_hetA(ta2,tb2)
+            lam_hetA_data[:,i] = glam(*xs)
+        
+        # pg 184 brandeis notebook
+        # u \in [-\infty 0] and (0,theta_1)
+        
+        exp = np.exp        
+        p_iter = self.p_iter
+        u1 = np.arange(0,-T*p_iter,-dxA_noend)
+        #u1 = np.arange(0,-T*p_iter,-dxA)
+        u1_idxs = np.arange(0,-len(u1),-1,dtype=int)
+        exponential1 = exp(-kappa*u1)
+        
+        # integral 1
+        i1 = np.zeros(NA)
+        
+        def return_integral1(i):
+            pass
+        
+        print('compile 1')
+        for i in range(NA):
+            p_idxs = np.remainder(i+u1_idxs,NA)
+            periodic = lam_hetA_data[p_idxs,np.remainder(u1_idxs,NA)]
+            i1[i] = np.sum(exponential1*periodic)*dxA_noend
+        
+        # integral 2
+        i2 = np.zeros((NA,NA))
+        
+        u2 = A_array2
+        u2_idxs = np.arange(len(u2))
+        exponential2 = exp(-kappa*u2)
+        
+        print('compile 2')
+        """  
+        print('compile 2')
+        for i in range(NA):
+            for j in range(NA):
+                #th1 = u2[i]
+                #th2 = A_array2[j]
+                
+                #xs = [u2[:i+1],th2-th1+u2[:i+1]]
+                
+                #for f in funs:
+                #    xs.append(f(*xs))
+                
+                #periodic = lam_hetA(u2[:i+1],th2-th1+u2[:i+1])#glam(*xs)
+                #periodic = glam(*xs)
+                
+                p_idxs = np.remainder(j-i + u2_idxs[:i+1],NA)
+                periodic = lam_hetA_data[p_idxs,u2_idxs[:i+1]]
+                #print(i,j)
+                i2[i,j] = np.sum(exponential2[:i+1]*periodic)*dxA_noend
+                #print('i2,ij',i,j,
+                #      np.sum(exponential[:i+1]*periodic)*dxA_noend,
+                #      exponential[:i+1],
+                #      p_idxs)
+                #print(i,j,th1,th2,i2[i,j])
+        """
+        
+        i2 = np.reshape(i2,(NA**2,))
+        
+        a_i = np.arange(NA,dtype=int)
+        b_i = np.arange(NA,dtype=int)
+        
+        A_mg_idxs, B_mg_idxs = np.meshgrid(a_i,b_i,indexing='ij')
+        
+        a_mg_idxs = np.reshape(A_mg_idxs,(NA*(NA),))
+        b_mg_idxs = np.reshape(B_mg_idxs,(NA*(NA),))
+        
+        idx = np.arange(len(a_mg_idxs))
+        
+        def return_integral(i):
+            th1_idx = a_mg_idxs[i]
+            th2_idx = b_mg_idxs[i]
+            
+            #th1 = u2[th1_idx]
+            #th2 = A_array2[th2_idx]
+            
+            #xs = [u2[:th1_idx+1],th2-th1+u2[:th1_idx+1]]
+            
+            #for f in funs:
+            #    xs.append(f(*xs))
+            
+            p_idxs = np.remainder(th2_idx-th1_idx+ u2_idxs[:th1_idx+1],NA)
+            periodic = lam_hetA_data[p_idxs,u2_idxs[:th1_idx+1]]
+            #print(i,j)
+            #print('i2,ij',i,j,
+            #      np.sum(exponential[:i+1]*periodic)*dxA_noend,
+            #      exponential[:i+1],
+            #      p_idxs)
+            #print(i,j,th1,th2,i2[i,j])
+            
+            #periodic = lam_hetA(u2[:th1_idx+1],th2-th1+u2[:th1_idx+1])
+            #return np.sum(exp(-kappa*u2[:th1_idx+1])*periodic)*dxA_noend, i
+            #return np.sum(exp(-kappa*u2[:th1_idx+1])*periodic)*dxA, i
+            #p_idxs = np.remainder(th2_idx-th1_idx + u_idxs[:th1_idx],NA)
+            #periodic = lam_hetA_data[p_idxs,u_idxs[:th1_idx]]
+            #print(i,j)
+            
+            return np.sum(exponential2[:th1_idx+1]*periodic)*dxA_noend, i
+            #return np.sum(exponential2[:th1_idx+1]*periodic)*dxA, i
+            
+         
+        
+        
+        for x in tqdm.tqdm(p.imap(return_integral,idx,chunksize=200000),
+                           total=len(idx)):
+            integral, idx = x
+            i2[idx] = integral
+        
+        i2 = np.reshape(i2,(NA,NA))
+        
+            
+        
+        pA_data = np.zeros((NA,NA))
+        """
+        expo = np.exp(-kappa*u)
+        #print('compile 3')
+        for i in range(NA):
+            for j in range(NA):
+                
+                p_idxs = np.remainder(j-i + u_idxs,NA)
+                periodic = lam_hetA_data[p_idxs,np.remainder(u_idxs,NA)]
+                
+                phi_idx = j-i #np.abs(diff_idx)
+                
+                int1 = i1[phi_idx]
+                
+                int2 = i2[i,j]
+                
+                pA_data[j,i] = exp(kappa*th1)*(int1+int2)
+        
+        
+        """
+        #print('compile 3')
+        for i in range(NA):
+            for j in range(NA):
+                th1 = A_array2[i]
+                #th2 = A_array2[j]
+                #diff_idx = 
+                phi_idx = j-i #np.abs(diff_idx)
+                
+                int1 = i1[phi_idx]
+                
+                int2 = i2[i,j]
+                
+                pA_data[j,i] = exp(kappa*th1)*(int1+int2)
+        
+        #print(pA_data)
+        
+        """
+        pA_data = np.reshape(pA_data,(NA**2,))
+        
+        a_i = np.arange(NA,dtype=int)
+        A_mg_idxs, B_mg_idxs = np.meshgrid(a_i,a_i)
+        
+        a_mg_idxs = np.reshape(A_mg_idxs,(NA**2,))
+        b_mg_idxs = np.reshape(B_mg_idxs,(NA**2,))
+        
+        idx = np.arange(len(a_mg_idxs))
+        
+        
+        def return_integral(i):
+            #return time integral at position a,b
+            th1_idx = a_mg_idxs[i]
+            th2_idx = b_mg_idxs[i]
+            th1 = A_array2[th1_idx]
+            #th2 = A_array2[th2_idx]
+            
+            phi_idx = th2_idx-th1_idx
+            
+            int1 = i1[phi_idx]
+            
+            if th1_idx > 0:
+                int2 = i2[th1_idx-1,th2_idx]
+            else:
+                int2 = 0
+    
+            return exp(kappa*th1)*(int1+int2), i
+    
+        
+        p = self.pool
+        
+        for x in tqdm.tqdm(p.imap(return_integral,idx,chunksize=1000),
+                           total=len(idx)):
+            integral, idx = x
+            pA_data[idx] = integral
+            
+        pA_data = np.reshape(pA_data,(NA,NA))
+        """
+        
+        return pA_data
+    
+        
+    def generate_p_old(self,k):
+        
+        #import scipy as sp
+        import numpy as np
+        #import time
+        
+        ta = self.thA
+        tb = self.thB
+        
+        NA = self.NA
         dxA_noend = self.dxA_noend
         T = self.T
         
-        grub
         if k == 0:
             #pA0 is 0 (no forcing function)
-            return np.zeros((self.NB,self.NA))
+            return np.zeros((self.NA,self.NA))
         
         # put these implemented functions into the expansion
         ruleA = {sym.Indexed('pA',i):
@@ -1723,10 +1905,10 @@ class Thalamic(object):
         
         #lam_hetA = lambdify([ta,tb],ph_impA)
         
-        lam_hetA_data = np.zeros((NB,NA))
+        lam_hetA_data = np.zeros((NA,NA))
         
         A_array2 = self.Aarr_noend
-        B_array2 = self.Barr_noend
+        B_array2 = self.Aarr_noend
         
         #print(A_array2[0],A_array2[-1],B_array2[0],B_array2[-1],self.dxA)
         #print(np.sum(lam_hetA(A_array2,B_array2)))
@@ -1743,21 +1925,26 @@ class Thalamic(object):
             #lam_hetA_data[:,i] = lam_hetA(ta2,tb2)
             lam_hetA_data[:,i] = glam(*xs)
         
-        
+        #print(lam_hetA_data)
         A_mg, B_mg = np.meshgrid(A_array2,B_array2)
         
         
         # parallelize
-        kappa = self.kappa
+        kappa = self.kappa_val
        
         r,c = np.shape(A_mg)
         a = np.reshape(A_mg,(r*c,))
-        
+
+        # get indices where lam_hetA_data is above threshold
+        #lam_dat_reshaped = np.reshape(lam_hetA_data,(r*c,))
+
         a_i = np.arange(NA,dtype=int)
         A_mg_idxs, B_mg_idxs = np.meshgrid(a_i,a_i)
         
         a_mg_idxs = np.reshape(A_mg_idxs,(r*c,))
         b_mg_idxs = np.reshape(B_mg_idxs,(r*c,))
+        
+        #print(len(a_mg_idxs),len(sig_bools))
         
         pA_data = np.zeros((r,c))
         pA_data = np.reshape(pA_data,(r*c,))
@@ -1771,26 +1958,68 @@ class Thalamic(object):
         s_idxs = np.arange(len(s),dtype=int)
         exponential = exp(s*kappa)
         
+        #print('s',s)
         def return_integral(i):
             """
             return time integral at position a,b
             """
+            a_idxs = np.remainder(a_mg_idxs[i]-s_idxs,NA)
+            b_idxs = np.remainder(b_mg_idxs[i]-s_idxs,NA)
             
-            a_idxs = np.mod(a_mg_idxs[i]-s_idxs,NA)
-            b_idxs = np.mod(b_mg_idxs[i]-s_idxs,NB)
+            #keepA = np.isin(a_idxs,sigA)
+            #keepB = np.isin(b_idxs,sigB)
             
-            periodic = lam_hetA_data[b_idxs,a_idxs]
+            #coincide = keepA*keepB
             
-            return np.sum(exponential*periodic)*dxA_noend, i
+            #print(keepB)
+            #print(i,a_idxs,b_idxs)
+            
+            #a_idxs = a_mg_idxs[i]-s_idxs
+            #b_idxs = b_mg_idxs[i]-s_idxs
+            slice = lam_hetA_data[b_idxs,a_idxs]
+            #keep_idxs = np.abs(slice)/magnitude>1e-4
+            periodic = slice#[keep_idxs]
+            #expo = exponential[keep_idxs]
+            integrand = exponential*periodic
+            #integrand = integrand[integrand/magnitude>1e-24]
+            #fn = lam_hetA_data[b_idxs[coincide],a_idxs[coincide]]
+            #expo = exponential[coincide]
+            #tot = np.sum(exponential*periodic)*dxA_noend
+            #tot = np.add.reduce(expo*fn)*dxA_noend
+
+            #return tot, i
+            #return np.add.reduce(exponential*periodic)*dxA_noend, i
+            return np.add.reduce(integrand)*dxA_noend, i
+        
+        
+        #start = time.time()
+        #for i in range(100):
+        #    return_integral2(10)
+        #end = time.time()
+        #print('time elapsed for integral'+str(i)+' = '+str(end-start))
+        #pA_data = self.generate_p_old(i)
+        
+        #for i in range(len(a)):
+        #    integral, idx = return_integral(i)
+        #    pA_data[idx] = integral
         
         p = self.pool
         
-        for x in tqdm.tqdm(p.imap(return_integral,idx,chunksize=200000),
+        #for res in p.imap_unordered(return_integral,idx,chunksize=100000):
+        #    integral, idx = res
+        #    pA_data[idx] = integral
+        
+        
+        for x in tqdm.tqdm(p.imap_unordered(return_integral,idx,
+                                            chunksize=10000),
                            total=len(a)):
             integral, idx = x
             pA_data[idx] = integral
-            
+            #pA_data += x
+        
         pA_data = np.reshape(pA_data,(r,c))
+        
+        #print(pA_data)
         
         return pA_data
     
@@ -1874,8 +2103,6 @@ class Thalamic(object):
         
         self.hodd['dat'] = []
         
-        #self.pool = _ProcessPool(processes=11)
-        
         for i in range(self.miter):
             fname = self.hodd['dat_fnames'][i]
             file_does_not_exist = not(os.path.isfile(fname))
@@ -1889,11 +2116,12 @@ class Thalamic(object):
                 print('* Loading H'+str(i)+'...')
                 data = np.loadtxt(self.hodd['dat_fnames'][i])
                 
-            if False:
+            if True:
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
                 ax.plot(data)
-                ax.set_title('hodd'+str(i))
+                ax.set_title('hodd'+str(i)+' NA='+str(self.NA))
+                #ax.set_ylim(-1000,1000)
                 plt.tight_layout()
                 plt.show(block=True)
                 time.sleep(.1)
@@ -1916,7 +2144,7 @@ class Thalamic(object):
         
         #T = self.T
         
-        h = np.zeros(self.NB)
+        h = np.zeros(self.NA)
         
         t = self.A_array
         
@@ -1941,65 +2169,24 @@ class Thalamic(object):
         
         #lam_h_data[:,j] = glam(*xs)
     
-        for j in range(self.NB):
-            eta = self.B_array[j]
+        for j in range(self.NA):
+            eta = self.A_array[j]
             
             xs = [t,t+eta]
             for f in funs:
                 xs.append(f(*xs))
                 
-            #print(xs,'xs')
-                
             h[j] = np.sum(glam(*xs))*self.dxA/self.T
             
-            #h[j] = np.sum(self.hodd['lam'][k](t,t+eta))*self.dxA/self.T
-        
-        """
-        def return_integral(i):
-            
-            eta = self.B_array[i]
-            out = np.sum(hodd_lam_k(t,t+eta))*self.dxA/T
-            
-            return out,i
-        
-        
-        b_i = np.arange(self.NB,dtype=int)
-        
-        p = self.pool
-        
-        for x in tqdm.tqdm(p.imap(return_integral,b_i,chunksize=100),
-                           total=len(b_i)):
-            integral, idx = x
-            h[idx] = integral
-        """
-        
-        
-        #for j in range(self.NB[k]):
-        #    print('hodd j=',j)
-        #    t = A_array
-        #    eta = B_array[j]
-        #    
-        #    h_mg[j,:] = self.hodd['lam'][k](t,t+eta)
-        
-        # for i in range(self.NA):
-        #     for j in range(self.NB):
-        #         t = self.A_array[i]
-        #         eta = self.B_array[j]
-                
-        #         h_mg[j,i] = self.h_lams[k](t,t+eta)
-                
-        # sum along axis to get final form
-        #h = np.sum(h_mg,axis=1)*dxA/self.T
-        
-        if True:
+        if False:
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.plot(h)
             title = ('h non-odd '+str(k)
                      +', NA='+str(self.NA)
-                     +', NB='+str(self.NB)
                      +', piter='+str(self.p_iter))
             ax.set_title(title)
+            ax.set_ylim(-.1,4.1)
             plt.show(block=True)
         
         #print(h)
@@ -2023,15 +2210,13 @@ class Thalamic(object):
         #z[0] *= 100
         #z[2] /= 100
         
-        #jac = self.jacLC(t)*(order > 0)
+        jac = self.jacLC(t)*(order > 0)
         
-        LC_vec = np.array([self.LC['lam_v'](t),
-                           self.LC['lam_h'](t),
-                           self.LC['lam_r'](t),
-                           self.LC['lam_w'](t)])
-        jac = self.numerical_jac(self.thal_rhs,LC_vec)*(order > 0)
+        #LC_vec = self.LC_vec(t)
+        #jac = self.numerical_jac(self.thal_rhs,LC_vec)*(order > 0)
+        #jac = self.numerical_jac(rhs,LC_vec)*(order > 0)
         
-        hom = np.dot(jac-order*self.kappa*self.eye,z)
+        hom = np.dot(jac-order*self.kappa_val*self.eye,z)
         #het = np.array([het_lams['v'](t),het_lams['h'](t),
         #                het_lams['r'](t),het_lams['w'](t)])
         
@@ -2061,8 +2246,7 @@ class Thalamic(object):
         order determines the Taylor expansion term
         """
         
-        hom = np.dot(self.jacLC(t).T+order*self.kappa*self.eye,z)
-        
+        hom = np.dot(self.jacLC(t).T+order*self.kappa_val*self.eye,z)
         out = -hom - het_vec(t)
         
         return out
@@ -2079,11 +2263,7 @@ class Thalamic(object):
         order determines the Taylor expansion term
         """
         
-        #z[0] *= 100
-        #z[2] /= 100
-        hom = np.dot(self.jacLC(t).T+(order-1)*self.kappa*self.eye,z)
-        
-        
+        hom = np.dot(self.jacLC(t).T+(order-1)*self.kappa_val*self.eye,z)
         out = -hom - het_vec(t)
         
         return out
@@ -2151,7 +2331,6 @@ class Thalamic(object):
             
         return het_vec
     
-    
     def fmod(self,fn):
         """
         fn has mod built-in
@@ -2171,24 +2350,6 @@ class Thalamic(object):
         """
         return lambda xA=self.thA,xB=self.thB: fn(xA,xB)
         
-    def myFunMod2A(self,fn):
-        """
-        same as above but for 2 variable function for use with interp2d 
-        function only.
-        
-        fn: must be interp2d function object
-        xA and xB must have same 1d array sizes. f(float,array) wont work.
-        
-        """
-        # need bispeu to allow for 1d array inputs.
-        ta = self.thA
-        tb = self.thB
-        T = self.T
-        
-        return lambda xA=ta,xB=tb:self.bispeu(fn,np.mod(xA,T),np.mod(xB,T))
-    
-    
-    
     def bispeu(self,fn,x,y):
         """
         silly workaround
@@ -2198,142 +2359,3 @@ class Thalamic(object):
         return si.dfitpack.bispeu(fn.tck[0], fn.tck[1],
                                   fn.tck[2], fn.tck[3],
                                   fn.tck[4], x, y)[0]
-
-
-def main():
-    
-<<<<<<< Updated upstream
-    a = Thalamic(recompute_LC=False,
-                 recompute_monodromy=False,
-                 recompute_g_sym=False,
-                 recompute_g=False,
-                 recompute_het_sym=False,
-                 recompute_z=False,
-                 recompute_i=False,
-                 recompute_k_sym=False,
-                 recompute_p_sym=False,
-                 recompute_p=False,
-                 recompute_h_sym=False,
-                 recompute_h=True,
-                 trunc_order=9,
-                 NA=10000,
-                 NB=10000,
-                 p_iter=10,
-                 TN=100000,
-                 ib_val=3.5,
-                 load_all=True)
-    
-    
-    #dill.detect.baditems(a)
-    
-    # get monodromy matrix
-    #a.load_monodromy()
-    
-    # get heterogeneous terms for g, floquet e. fun.
-    #a.load_g_sym()
-        
-    # get g
-    #a.load_g()
-    
-    # get het. terms for z and i
-    #a.load_het_sym()
-    
-    # get iPRC, iIRC.
-    #a.load_z()
-    #a.load_i()
-    #a.load_k_sym()
-    
-    #a.load_p_sym()
-    #a.load_p()
-
-    #a.load_h_sym()
-    #a.load_h()
-
-
-    """
-    for i in range(a.miter):
-        lib.plot(a,'g'+str(i))
-    
-    
-    for i in range(a.miter):
-        lib.plot(a,'z'+str(i))
-    
-    for i in range(a.miter):
-        lib.plot(a,'i'+str(i))
-    
-    for i in range(a.miter):
-        lib.plot(a,'pA'+str(i))
-    
-    
-    
-    for i in range(a.miter):
-        lib.plot(a,'hodd'+str(i))
-    #lib.plot(a,'hodd1')
-   """
-    
-    """
-    lib.plot(a,'surface_z')
-    lib.plot(a,'surface_i')
-    """
-    
-    plt.show(block=True)
-=======
-    var_names = ['v','h','r','w']
-    
-    pardict = {'gL_val':0.05,
-               'gna_val':3,
-               'gk_val':5,
-               'gt_val':5,
-               'eL_val':-70,
-               'ena_val':50,
-               'ek_val':-90,
-               'et_val':0,
-               'esyn_val':0,
-               'c_val':1,
-               'alpha_val':3,
-               'beta_val':2,
-               'sigmat_val':0.8,
-               'vt_val':-20,
-               'ib_val':3.5}
-    
-    kwargs = {'recompute_LC':True,
-              'recompute_monodromy':True,
-              'recompute_g_sym':True,
-              'recompute_g':True,
-              'recompute_het_sym':True,
-              'recompute_z':True,
-              'recompute_i':True,
-              'recompute_k_sym':True,
-              'recompute_p_sym':True,
-              'recompute_p':True,
-              'recompute_h_sym':True,
-              'recompute_h':True,
-              'trunc_order':2,
-              'dir':'home+thalamic_dat/',
-              'NA':1001,
-              'NB':1001,
-              'p_iter':25,
-              'TN':20000,
-              'rtol':1e-7,
-              'atol':1e-7,
-              'rel_tol':1e-6,
-              'method':'LSODA',
-              'load_all':True}
-    
-    T_init = 10.6
-    LC_init = np.array([-.64,0.71,0.25,0,T_init])
-    
-    a = StrongCoupling(rhs,coupling,LC_init,var_names,pardict,**kwargs)
->>>>>>> Stashed changes
-    
-    
-if __name__ == "__main__":
-    
-    
-    __spec__ = None
-    #import cProfile
-    #import re
-    #cProfile.runctx('main()',globals(),locals(),'profile.pstats')
-    #cProfile.runctx('main()',globals(),locals())
-
-    main()

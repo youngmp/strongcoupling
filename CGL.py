@@ -21,23 +21,10 @@ TODO:
 
 
 # user-defined
-import MatchingLib as lib
-from interp_basic import interp_basic as interpb
-from interp2d_basic import interp2d_basic as interp2db
-import SymLib as slib
 
-import inspect
-import time
-import os
-import math
-#import time
-import dill
-import copy
 import matplotlib
-import tqdm
-
-import scipy.interpolate as si
 import numpy as np
+<<<<<<< Updated upstream
 import scipy as sp
 import sympy as sym
 import matplotlib.pyplot as plt
@@ -59,10 +46,16 @@ imp_fn = implemented_function
 #from scipy.interpolate import interp1d, interp2d
 from scipy.interpolate import interp2d
 from scipy.integrate import solve_ivp, quad
+=======
+from sympy import Matrix
+
+from StrongCoupling import StrongCoupling
+>>>>>>> Stashed changes
 
 matplotlib.rcParams.update({'figure.max_open_warning': 0})
 
 
+<<<<<<< Updated upstream
 class CGL(object):
     """
     Non-radial Isochron Clock
@@ -298,6 +291,31 @@ class CGL(object):
     
     
     def coupling(self,vars_pair,option='value'):
+=======
+def rhs(t,z,pdict,option='value'):
+    """
+    right-hand side of the equation of interest. CCGL model.
+    
+    write in standard python notation as if it will be used in an ODE solver.
+
+    Returns
+    -------
+    right-hand side equauation in terms of the inputs. if x,y scalars, return scalar.
+    if x,y, sympy symbols, return symbol.
+    """
+    
+    x,y = z
+    R2 = x**2 + y**2
+    
+    if option == 'value':
+        return np.array([x*(1-R2)-pdict['q']*R2*y,
+                         y*(1-R2)+pdict['q']*R2*x])
+    elif option == 'sym':
+        return Matrix([x*(1-R2)-pdict['q']*R2*y,
+                       y*(1-R2)+pdict['q']*R2*x])
+
+def coupling(vars_pair,pdict,option='value'):
+>>>>>>> Stashed changes
         """
         r^(2n) to r^n function. default parameter order is from perspective of
         first oscillator.
@@ -307,6 +325,7 @@ class CGL(object):
         x1,y1,x2,y2 = vars_pair
         
         if option == 'value':
+<<<<<<< Updated upstream
             return np.array([x2-x1-self.d_val*(y2-y1),y2-y1+self.d_val*(x2-x1)])
         elif option == 'sym':
             return Matrix([x2-x1-self.d*(y2-y1),y2-y1+self.d*(x2-x1)])
@@ -1902,6 +1921,14 @@ class CGL(object):
         return lambda x=self.s,xA=self.tA,xB=self.tB: fn(np.mod(xA-x,self.T),np.mod(xB-x,self.T))
 
 
+=======
+            return np.array([x2-x1-pdict['d']*(y2-y1),
+                             y2-y1+pdict['d']*(x2-x1)])
+        elif option == 'sym':
+            return Matrix([x2-x1-pdict['d']*(y2-y1),
+                           y2-y1+pdict['d']*(x2-x1)])
+    
+>>>>>>> Stashed changes
 
 def main():
     
@@ -1928,8 +1955,34 @@ def main():
     for i in range(a.miter):
         lib.plot(a,'g'+str(i))
     
+<<<<<<< Updated upstream
     for i in range(a.miter):
         lib.plot(a,'z'+str(i))
+=======
+    kwargs = {'recompute_LC':True,
+              'recompute_monodromy':True,
+              'recompute_g_sym':True,
+              'recompute_g':True,
+              'recompute_het_sym':True,
+              'recompute_z':True,
+              'recompute_i':True,
+              'recompute_k_sym':True,
+              'recompute_p_sym':True,
+              'recompute_p':True,
+              'recompute_h_sym':True,
+              'recompute_h':True,
+              'dir':'cgl_dat/',
+              'trunc_order':2,
+              'NA':501,
+              'NB':501,
+              'p_iter':25,
+              'TN':20000,
+              'rtol':1e-7,
+              'atol':1e-7,
+              'rel_tol':1e-6,
+              'method':'LSODA',
+              'load_all':True}
+>>>>>>> Stashed changes
     
     for i in range(a.miter):
         lib.plot(a,'i'+str(i))
