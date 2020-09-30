@@ -19,12 +19,13 @@ Notes:
 
 """
 import copy
+import lib_sym as slib
 
 import lib
 from interp_basic import interp_basic as interpb
 from interp2d_basic import interp2d_basic as interp2db
 from lam_vec import lam_vec
-import SymLib as slib
+
 
 #import inspect
 import time

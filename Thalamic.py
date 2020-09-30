@@ -4,9 +4,6 @@
 # https://stackoverflow.com/questions/49306092/...
 #parsing-a-symbolic-expression-that-includes-user-defined-functions-in-sympy
 
-# TODO: note heterogeneous terms in right-hand sides are hard-coded.
-
-
 # user-defined
 
 import numpy as np
