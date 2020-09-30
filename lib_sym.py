@@ -4,7 +4,7 @@ Created on Sun Aug 16 10:43:11 2020
 
 library for creating symbolic functions
 """
-import MatchingLib as lib
+import lib
 
 import os
 import math
@@ -12,8 +12,8 @@ import dill
 
 import sympy as sym
 
-from sympy import Matrix, symbols,diff, pi, Sum, Indexed, collect, expand
-from sympy.utilities.lambdify import lambdify, implemented_function
+from sympy import diff, Sum, Indexed, collect, expand
+from sympy.utilities.lambdify import lambdify
 
 def generate_expansions(obj):
     """
@@ -71,6 +71,8 @@ def load_coupling_expansions(obj,fn='gA',recompute=False):
             val += not(os.path.isfile(obj.g[key+'_epsB_fname']))
             val += not(os.path.isfile(obj.i[key+'_epsA_fname']))
             val += not(os.path.isfile(obj.i[key+'_epsB_fname']))
+            
+            #print(key,obj.g[key+'_epsA_fname'])
             
         if val != 0:
             files_do_not_exist = True
