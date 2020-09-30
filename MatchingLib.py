@@ -184,7 +184,7 @@ def monodromy2(t,z,obj):
                        obj.LC['lam_r'](t),
                        obj.LC['lam_w'](t)])
     
-    jac = obj.numerical_jac(obj.thal_rhs,LC_vec)
+    jac = obj.numerical_jac(obj.rhs,LC_vec)
     
     #print(jac)
     n = int(np.sqrt(len(z)))
