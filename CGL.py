@@ -19,19 +19,13 @@ TODO:
 
 """
 
-import strongcoupling
+from core.StrongCoupling import StrongCoupling
 
 # user-defined
 
 #import matplotlib
 import numpy as np
 from sympy import Matrix
-
-#from ..strongcoupling.core.StrongCoupling import StrongCoupling
-
-from ..core.StrongCoupling import StrongCoupling
-
-#from . import main
 
 def rhs(t,z,pdict,option='value'):
     """
