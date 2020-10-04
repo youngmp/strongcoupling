@@ -26,7 +26,7 @@ TODO:
 import numpy as np
 from sympy import Matrix
 
-from StrongCoupling import StrongCoupling
+from ...core.StrongCoupling import StrongCoupling
 
 def rhs(t,z,pdict,option='value'):
     """

@@ -6,3 +6,4 @@ cgl_dat/cB.d
 *.png
 *.py~
 *.pdf
+*.pstats

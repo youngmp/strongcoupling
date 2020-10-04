@@ -17,10 +17,10 @@ class interp_basic(object):
         self.y = y
         self.T = T
         
-        #self.interp = interp1d(self.x,self.y,kind='cubic')
+        self.interp = interp1d(self.x,self.y,kind='cubic')
 
     def __call__(self, x_new):
         x_new = np.mod(x_new,self.T)
-        #return self.interp(x_new)
-        return compiled_interp(x_new, self.x, self.y,
-                               left=False, right=False)
+        return self.interp(x_new)
+        #return compiled_interp(x_new, self.x, self.y,
+        #                       left=False, right=False)
