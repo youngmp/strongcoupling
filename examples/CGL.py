@@ -19,6 +19,7 @@ TODO:
 
 """
 
+import strongcoupling
 
 # user-defined
 
@@ -26,7 +27,11 @@ TODO:
 import numpy as np
 from sympy import Matrix
 
-from ...core.StrongCoupling import StrongCoupling
+#from ..strongcoupling.core.StrongCoupling import StrongCoupling
+
+from ..core.StrongCoupling import StrongCoupling
+
+#from . import main
 
 def rhs(t,z,pdict,option='value'):
     """
@@ -109,6 +114,6 @@ def main():
     
     
 if __name__ == "__main__":
-    
+    __name__ = 'CGL'
     __spec__ = None
     main()
