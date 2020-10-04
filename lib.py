@@ -128,6 +128,22 @@ def df(fn,xvec,k):
     return df
     
 
+def monodromy(t,z,jacLC):
+    """
+    calculate right-hand side of system
+    \dot \Phi = J\Phi, \Phi(0)=I
+    \Phi is a matrix solution
+    
+    jacLC is the jacobian evaluated along the limit cycle
+    """
+    
+    n = int(np.sqrt(len(z)))
+    z = np.reshape(z,(n,n))
+    
+    #print(n)
+    dy = np.dot(jacLC(t),z)
+    
+    return np.reshape(dy,n*n)
 
 def kProd(k,dx):
     """
@@ -479,7 +495,6 @@ def generate_fnames(obj,model_pars='',coupling_pars=''):
     
     obj.pA['dat_fnames'] = [(obj.dir+'pA_dat_'+str(i)+model_pars
                             +c_pars
-                            +'_NA='+str(obj.NA)
                             +'_NB='+str(obj.NB)
                             +'_piter='+str(obj.p_iter)
                             +'.txt')

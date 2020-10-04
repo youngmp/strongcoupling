@@ -80,7 +80,7 @@ def return_slope_sign(eps,hterms,state='sync',order=8):
         ax.set_title('eps='+str(eps))
         plt.show(block=True)
         
-    #print(diff)
+    #print(diff,eps,state)
         
     return diff
 
@@ -103,6 +103,9 @@ def cgl_h():
     d_vals = np.linspace(d_center-1,d_center+1,100)[10:][::2]
     d1 = d_vals[6]
     d2 = d_vals[3]
+    
+    eps1 = .26
+    eps2 = -.66
 
     order_list = [2,4,10]
     
@@ -123,9 +126,9 @@ def cgl_h():
               'recompute_p_sym':False,
               'recompute_p':False,
               'recompute_h_sym':False,
-              'recompute_h':True,
+              'recompute_h':False,
               'trunc_order':9,
-              'dir':'cgl_dat/',
+              'dir':'home+cgl_dat/',
               'NA':1000,
               'NB':1000,
               'p_iter':5,
@@ -141,21 +144,22 @@ def cgl_h():
     T_init = 2*np.pi
     LC_init = np.array([1,0,T_init])
 
-    a = StrongCoupling(CGL.rhs,CGL.coupling,LC_init,var_names,pardict,**kwargs)
-
-    kwargs['d_val'] = d1
+    pardict['d_val'] = d1
+    kwargs['coupling_pars'] = '_d='+str(d1)
     a1 = StrongCoupling(CGL.rhs,CGL.coupling,LC_init,
                            var_names,pardict,**kwargs)
 
-    kwargs['d_val'] = d2
+    
+    kwargs['load_all'] = False
+    pardict['d_val'] = d2
+    kwargs['coupling_pars'] = '_d='+str(d2)
     a2 = StrongCoupling(CGL.rhs,CGL.coupling,LC_init,
                            var_names,pardict,**kwargs)
 
     a1.load_h()
     a2.load_h()
 
-    eps1 = .3
-    eps2 = -.7
+   
 
     label1 = [r'\textbf{A}'+r' $d=%.1f$, $\varepsilon=%.1f$'
                        % (a1.d_val, eps1),r'\textbf{B}',r'\textbf{C}']
@@ -168,11 +172,15 @@ def cgl_h():
     axs[1,0].set_ylabel(r'$-2\mathcal{H}_\text{odd}(\phi)$')
     
     for i in range(3):
+        
+        axs[0,i].set_title(label1[i],x=xs[i],y=1)
+        axs[1,i].set_title(label2[i],x=xs[i],y=1)
+        
         h1 = h(order_list[i],a1.hodd['dat'],eps1)
         h2 = h(order_list[i],a2.hodd['dat'],eps2)
 
         x = np.linspace(0,a1.T,len(h1))
-
+        
         # h functions
         axs[0,i].plot(x,h1,color='k',label='Order '+str(order_list[i]))
         axs[1,i].plot(x,h2,color='k',label='Order '+str(order_list[i]))
@@ -189,27 +197,42 @@ def cgl_h():
 
         axs[1,i].set_xlabel(r'$\phi$')
         
-        axs[0,i].set_title(label1[i],x=xs[i])
-        axs[1,i].set_title(label2[i],x=xs[i])
-        #axs[1,i].set_title('d='+str(a2.d_val)
-        #                   +'Order '+str(order_list[i]))
-        #axs[0,i].legend(fontsize=8)
-        #axs[1,i].legend(fontsize=8)
-        
         axs[0,i].set_xticks([0,np.pi,2*np.pi])
         axs[1,i].set_xticks([0,np.pi,2*np.pi])
         
         axs[0,i].set_xticklabels(['$0$','$T/2$','$T$'])
         axs[1,i].set_xticklabels(['$0$','$T/2$','$T$'])
 
+        
+        #axs[1,i].set_title('d='+str(a2.d_val)
+        #                   +'Order '+str(order_list[i]))
+        #axs[0,i].legend(fontsize=8)
+        #axs[1,i].legend(fontsize=8)
+
+        
+        if i == 2:
+            axins1 = inset_axes(axs[0,i], width="40%", height="25%", loc=2)
+            #axins.plot([Us[0],Us[-1]],[0,0],color='gray',lw=1)
+            
+            axins1.plot(x,h1,color='k')
+            axins1.set_xlim(x[int(a1.NA/2)]-.4,x[int(a1.NA/2)]+.4)
+            axins1.set_ylim(-.01,.01)
+            axins1.plot([0,2*np.pi],[0,0],color='gray',lw=.5,zorder=-1)
+
+            mark_inset(axs[0,i], axins1, loc1=2, loc2=1,
+                       fc="none", ec='0.5',alpha=0.5)
+
+            axins1.set_xticks([])
+            axins1.set_yticks([])
+
         if i == 2:
             axins = inset_axes(axs[1,i], width="40%", height="25%", loc=3)
             #axins.plot([Us[0],Us[-1]],[0,0],color='gray',lw=1)
-            upper_idx = 11
+            upper_idx = 25
             axins.plot(x[:upper_idx],h2[:upper_idx],color='k')
             axins.set_xlim(0,np.amax(x[:upper_idx]))
-            axins.set_ylim(np.amin(h2[:upper_idx])-.05,
-                           np.amax(h2[:upper_idx])+.05)
+            axins.set_ylim(np.amin(h2[:upper_idx])-.01,
+                           np.amax(h2[:upper_idx])+.01)
             axins.plot([0,2*np.pi],[0,0],color='gray',lw=.5,zorder=-1)
 
             mark_inset(axs[1,i], axins, loc1=2, loc2=1,
@@ -217,13 +240,16 @@ def cgl_h():
 
             axins.set_xticks([])
             axins.set_yticks([])
-        
+      
 
+    #plt.subplots_adjust(bottom=.4,top=.5,left=.5)
+    
     plt.tight_layout()
+    
     return fig
 
 
-def cgl_2par(recompute_2par=False,recompute_all=False):
+def cgl_2par(recompute_2par=False):
     
     fig = plt.figure(figsize=(5,3))
         
@@ -233,6 +259,7 @@ def cgl_2par(recompute_2par=False,recompute_all=False):
     # use this array and cut out pieces to avoid lots of recomputing.
     d_center = 1
     d_vals = np.linspace(d_center-1,d_center+1,100)[10:][::2]
+    #d_vals = [.8,.9]
     
     var_names = ['x','y']
     
@@ -253,16 +280,18 @@ def cgl_2par(recompute_2par=False,recompute_all=False):
               'recompute_h_sym':False,
               'recompute_h':False,
               'trunc_order':9,
-              'dir':'cgl_dat/',
+              'dir':'home+cgl_dat/',
               'NA':501,
               'NB':501,
-              'p_iter':25,
+              'p_iter':5,
               'TN':2001,
               'rtol':1e-7,
               'atol':1e-7,
               'rel_tol':1e-6,
               'method':'LSODA',
-              'load_all':True}
+              'load_all':False,
+              'processes':4,
+              'chunksize':10000}
     
     T_init = 2*np.pi
     LC_init = np.array([1,0,T_init])
@@ -288,6 +317,7 @@ def cgl_2par(recompute_2par=False,recompute_all=False):
         for j,d in enumerate(d_vals):
             print('j,d =',j,d)
             pardict['d_val'] = d
+            kwargs['coupling_pars'] = '_d='+str(d)
             
             a.__init__(CGL.rhs,CGL.coupling,LC_init,
                        var_names,pardict,**kwargs)
@@ -307,7 +337,7 @@ def cgl_2par(recompute_2par=False,recompute_all=False):
                 sgn = -1
                 
             # positive eps
-            eps_anti = brentq(return_slope_sign,sgn*0.001,sgn*.5,
+            eps_anti = brentq(return_slope_sign,sgn*0.0001,sgn*1,
                               args=(a.hodd['dat'],'anti',
                                     a.trunc_order+1))
             
@@ -372,6 +402,10 @@ def cgl_2par(recompute_2par=False,recompute_all=False):
     
     
     # label regions
+    
+    eps1 = .26
+    eps2 = -.66
+    
     ax.text(1.,0.25,'I',fontsize=16,family='serif',ha='center')
     ax.text(1.,-0.3,'I',fontsize=16,family='serif',ha='center')
 
@@ -382,10 +416,10 @@ def cgl_2par(recompute_2par=False,recompute_all=False):
     ax.text(0.5,-0.095,'III',fontsize=16,family='serif',ha='center')
 
     # these coordinates/labels depend on the cgl H function figure
-    ax.scatter(0.4,0.3,marker='*',color='k',s=50)
-    ax.text(0.425,0.3,'A,B,C',va='center',fontsize=12)
-    ax.scatter(0.3,-0.7,marker='*',color='k',s=50)
-    ax.text(0.325,-0.7,'D,E,F',va='center',fontsize=12)
+    ax.scatter(0.4,eps1,marker='*',color='k',s=50,zorder=3)
+    ax.text(0.425,eps1,'A,B,C',va='bottom',fontsize=12)
+    ax.scatter(0.3,eps2,marker='*',color='k',s=50,zorder=3)
+    ax.text(0.325,eps2,'D,E,F',va='top',fontsize=12)
     
     #old_boundary = matplotlib.patches.Rectangle((0.4,-.25),1.4,.5,
     #                                            facecolor="none",
@@ -426,9 +460,10 @@ def rhs(t,y,obj,eps):
     y_reverse = np.zeros(8)
     y_reverse[:4] = y[4:]
     y_reverse[4:] = y[:4]
-    z[:4] = obj.thal_rhs(t,y[:4]) + eps*obj.thal_coupling(y)
-    z[4:] = obj.thal_rhs(t,y[4:]) + eps*obj.thal_coupling(y_reverse)
-    #(z,t)
+    z[:4] = obj.rhs(t,y[:4],obj.pardict_val) \
+        + eps*obj.coupling(y,obj.pardict_val)
+    z[4:] = obj.rhs(t,y[4:],obj.pardict_val) \
+        + eps*obj.coupling(y_reverse, obj.pardict_val)
     return z
 
 
@@ -443,7 +478,9 @@ def thalamic_diffs(ax,a,eps,recompute=False,Tf=0):
     if eps > 0.01 and eps < 0.05:
         T = a.T
         LC = np.loadtxt('thal2_lc_eps=0.dat')
-        T2 = T
+        #T2 = LC[-1,0]#T
+        
+        T = 10.648268787326937
     elif eps == 0.1 or eps == 0.09:
         LC = np.loadtxt('thal2_lc_eps=0.dat')
         T = LC[-1,0]
@@ -466,6 +503,10 @@ def thalamic_diffs(ax,a,eps,recompute=False,Tf=0):
     
     #theta_vals = np.linspace(.1,T/2,10)
     
+    # force made manual now. Make sure to truncate for filename
+    # TODO Truncate for fname
+    #T = 10.648268787323813
+    
     theta_vals = np.arange(T/20,T,T/20)
     
     for i,theta in enumerate(theta_vals):
@@ -473,7 +514,9 @@ def thalamic_diffs(ax,a,eps,recompute=False,Tf=0):
         fname = (a.dir+'diff_phi='+str(theta)
                  +'_eps='+str(eps)+'Tf='+str(Tf))+'.txt'
         
+        print(fname)
         file_does_not_exist = not(os.path.isfile(fname))
+        print(file_does_not_exist)
         
         if file_does_not_exist or recompute:
             phase1 = 0
@@ -532,10 +575,10 @@ def thalamic_diffs(ax,a,eps,recompute=False,Tf=0):
             data = np.loadtxt(fname)
             
         t = data[:,0]
-        phi = data[:,2] - data[:,1]
+        phi = -(data[:,2] - data[:,1])
         
         if eps == 0.25 or eps == 0.09:
-            if phi[-1] > 0:
+            if phi[-1] < 0:
                 phi *= -1
             
             
@@ -563,6 +606,51 @@ def thalamic_diffs(ax,a,eps,recompute=False,Tf=0):
 def thalamic_h():
     #fig = plt.figure()
     
+    var_names = ['v','h','r','w']
+    
+    pardict = {'gL_val':0.05,
+               'gna_val':3,
+               'gk_val':5,
+               'gt_val':5,
+               'eL_val':-70,
+               'ena_val':50,
+               'ek_val':-90,
+               'et_val':0,
+               'esyn_val':0,
+               'c_val':1,
+               'alpha_val':3,
+               'beta_val':2,
+               'sigmat_val':0.8,
+               'vt_val':-20,
+               'ib_val':3.5}
+    
+    kwargs = {'recompute_LC':False,
+              'recompute_monodromy':False,
+              'recompute_g_sym':False,
+              'recompute_g':False,
+              'recompute_het_sym':False,
+              'recompute_z':False,
+              'recompute_i':False,
+              'recompute_k_sym':False,
+              'recompute_p_sym':False,
+              'recompute_p':False,
+              'recompute_h_sym':False,
+              'recompute_h':False,
+              'i_bad_dx':False,
+              'trunc_order':3,
+              'ib_val':3.5,
+              'NA':8001,
+              'NB':8001,
+              'TN':20000,
+              'p_iter':25,
+              'dir':'home+thalamic_dat/',
+              'rtol':1e-7,
+              'atol':1e-7,
+              'rel_tol':1e-6,
+              'method':'LSODA',
+              'load_all':False}
+    
+    """
     options = {'recompute_g_sym':False,
                'recompute_g':False,
                'recompute_het_sym':False,
@@ -580,6 +668,7 @@ def thalamic_h():
                'TN':20000,
                'p_iter':25,
                'load_all':False}
+    """
     
     termlist = [1,2,4]
     epslist = [0.02,0.09,0.25]
@@ -591,7 +680,12 @@ def thalamic_h():
                 r' $g_\text{syn} = '+str(epslist[2]) + '$']
     order_text = ['Order 1', 'Order 2', 'Order 4']
     
-    a = Thalamic(**options)
+    T_init = 10.6
+    LC_init = np.array([-.64,0.71,0.25,0,T_init])
+    a = StrongCoupling(Thalamic.rhs,Thalamic.coupling,
+                       LC_init,var_names,pardict,**kwargs)
+    
+    #a = Thalamic(**options)
     a.load_h()
     
     fig, axs = plt.subplots(nrows=2,ncols=len(epslist),figsize=(7,2.5))
@@ -640,9 +734,9 @@ def thalamic_h():
         if i == 0:
             anti = a.T/2
         elif i == 1:
-            anti = a.T - 10/2
+            anti = 10/2
         elif i == 2:
-            anti = a.T - 8.4/2
+            anti = 8.4/2
         
         axs[0,i].annotate('',xy=(anti, np.amin(h)*1.1),
                           xytext=(a.T/2,0),
@@ -884,10 +978,10 @@ def main():
     
     # listed in order of Figures in paper
     figures = [
-        (cgl_h,[],['cgl_h.pdf','cgl_h.png']),
+        #(cgl_h,[],['cgl_h.pdf','cgl_h.png']),
         #(cgl_2par,[],['cgl_2par.pdf','cgl_2par.png']),
         
-        #(thalamic_h,[],['thal_h.pdf','thal_h.png']),
+        (thalamic_h,[],['thal_h.pdf','thal_h.png']),
         #(thalamic_1par,[],['thal_1par.pdf']),
     ]
     

@@ -93,6 +93,9 @@ class StrongCoupling(object):
             g_small_idx = False
         z_bad_idx: same idea as g_small_idx for PRCs
         i_bad_idx: same idea as g_small_idx for IRCs
+        
+        coupling_pars: str. example: input '_d='+str(d_par) to include the d
+            parameter d_par in the hodd function name.
         """
 
         defaults = {
@@ -117,6 +120,12 @@ class StrongCoupling(object):
             'z_bad_dx':False,
             'i_bad_dx':False,
             
+            'g_jac_eps':1e-3,
+            'z_jac_eps':1e-3,
+            'i_jac_eps':1e-3,
+            
+            'coupling_pars':'',
+            
             'recompute_LC':False,
             'recompute_monodromy':False,
             'recompute_g_sym':False,
@@ -130,6 +139,9 @@ class StrongCoupling(object):
             'recompute_h_sym':False,
             'recompute_h':False,
             'load_all':True,
+            
+            'processes':2,
+            'chunksize':10000
             }
         
         self.rhs = rhs
@@ -151,6 +163,13 @@ class StrongCoupling(object):
         assert((type(self.i_forward) is bool) or
                (type(self.i_forward) is list))
         
+        assert((type(self.g_jac_eps) is float) or\
+               (type(self.g_jac_eps) is list))
+        assert((type(self.z_jac_eps) is float) or\
+               (type(self.z_jac_eps) is list))
+        assert((type(self.i_jac_eps) is float) or\
+               (type(self.i_jac_eps) is list))
+            
         # update self with model parameters and save to dict
         self.pardict_sym = {}
         self.pardict_val = {}
@@ -308,7 +327,11 @@ class StrongCoupling(object):
         if (not os.path.exists(self.dir)):
             os.makedirs(self.dir)
         
-        lib.generate_fnames(self)
+        if self.coupling_pars == '':
+            print('NOTE: coupling_pars set to default empty string.\
+                  Please specify coupling_pars in kwargs if\
+                  varying parameters.')
+        lib.generate_fnames(self,coupling_pars=self.coupling_pars)
         
         # make rhs callable
         #self.rhs_sym = self.thal_rhs(0,self.vars,option='sym')
@@ -492,7 +515,7 @@ class StrongCoupling(object):
             
         self.LC_vec = lam_vec(lam_list)
             
-        if True:
+        if False:
             #print('lc init',self.LC['dat'][0,:])
             #print('lc final',self.LC['dat'][-1,:])
             fig, axs = plt.subplots(nrows=self.dim,ncols=1)
@@ -879,7 +902,7 @@ class StrongCoupling(object):
             else:
                 data = np.loadtxt(fname)
                 
-            if True:
+            if False:
                 fig, axs = plt.subplots(nrows=self.dim,ncols=1)
                 
                 for j,ax in enumerate(axs):
@@ -1115,7 +1138,7 @@ class StrongCoupling(object):
             else:
                 data = np.loadtxt(fname)
                 
-            if True:
+            if False:
                 fig, axs = plt.subplots(nrows=self.dim,ncols=1)
                 
                 for j,ax in enumerate(axs):
@@ -1165,14 +1188,21 @@ class StrongCoupling(object):
         else:
             raise ValueError('g_forward must be bool or list, not',
                              type(self.g_forward))
+            
+            
+        if type(self.z_jac_eps) is float:
+            eps = self.z_jac_eps
+        elif type(self.z_jac_eps) is list:
+            eps= self.z_jac_eps[k]
+        else:
+            raise ValueError('z_jac_eps must be bool or list, not',
+                             type(self.z_jac_eps))
         
         if k == 0:
             init = copy.deepcopy(self.z0_init)
-            eps = 1e-1
             #init = [-1.389, -1.077, 9.645, 0]
         else:
             init = np.zeros(self.dim)
-            eps = 1e-4
             
             init = lib.run_newton2(self,self.dz,init,k,het_vec,
                                   max_iter=20,eps=eps,alpha=1,
@@ -1185,7 +1215,7 @@ class StrongCoupling(object):
         else:
             tLC = self.tLC
             
-        sol = solve_ivp(self.dz,[0,-self.tLC[-1]],
+        sol = solve_ivp(self.dz,[0,tLC[-1]],
                         init,args=(k,het_vec),
                         method=self.method,dense_output=True,
                         t_eval=tLC,
@@ -1232,7 +1262,7 @@ class StrongCoupling(object):
             else:
                 data = np.loadtxt(fname)
                 
-            if True:
+            if False:
                 fig, axs = plt.subplots(nrows=self.dim,ncols=1)
                 
                 for j,ax in enumerate(axs):
@@ -1296,13 +1326,19 @@ class StrongCoupling(object):
         else:
             raise ValueError('i_bad_dx must be bool or list, not',
                              type(self.i_bad_dx))
+            
+        if type(self.i_jac_eps) is float:
+            eps = self.i_jac_eps
+        elif type(self.i_jac_eps) is list:
+            eps= self.i_jac_eps[k]
+        else:
+            raise ValueError('i_jac_eps must be bool or list, not',
+                             type(self.i_jac_eps))
         
         if k == 0:
             init = copy.deepcopy(self.i0_init)
-            eps = 1e-2
         else:
             init = np.zeros(self.dim)
-            eps = 1e-4
             init = lib.run_newton2(self,self.di,init,k,het_vec,
                                    max_iter=20,rel_tol=self.rel_tol,
                                    eps=eps,alpha=1.,
@@ -1310,14 +1346,23 @@ class StrongCoupling(object):
 
             init = np.zeros(self.dim)
         
-        sol = solve_ivp(self.di,[0,-self.tLC[-1]],init,
+        if backwards:
+            tLC = -self.tLC
+            
+        else:
+            tLC = self.tLC
+        
+        sol = solve_ivp(self.di,[0,tLC[-1]],init,
                         args=(k,het_vec),
-                        t_eval=-self.tLC,
+                        t_eval=tLC,
                         method=self.method,dense_output=True,
                         rtol=self.rtol,atol=self.atol)
     
-        iu = sol.y.T[::-1,:]
-        #iu = sol.y.T
+        if backwards:
+            iu = sol.y.T[::-1,:]
+            
+        else:
+            iu = sol.y.T
         
         if k == 0:
             # normalize. classic weak coupling theory normalization
@@ -1516,7 +1561,6 @@ class StrongCoupling(object):
         self.pA['sym'] = []
         #self.pB['sym'] = []
         
-        
         if self.recompute_p_sym or not(lib.files_exist(self.pA['sym_fnames'])):
             print('* Computing p symbolic...')
             ircA = self.eps*self.i['vecA'].dot(self.cA['vec'])
@@ -1549,7 +1593,8 @@ class StrongCoupling(object):
         
         
         #print('starting new pool')
-        self.pool = _ProcessPool(processes=8)
+        self.pool = _ProcessPool(processes=self.processes)
+        
         
         for i,fname in enumerate(self.pA['dat_fnames']):
             #print('pA datfname',fname,os.path.isfile(fname))
@@ -1791,7 +1836,8 @@ class StrongCoupling(object):
          
         
         
-        for x in tqdm.tqdm(p.imap(return_integral,idx,chunksize=200000),
+        for x in tqdm.tqdm(p.imap(return_integral,idx,
+                                  chunksize=self.chunksize),
                            total=len(idx)):
             integral, idx = x
             i2[idx] = integral
@@ -2128,10 +2174,11 @@ class StrongCoupling(object):
     def load_h(self):
         
         self.hodd['dat'] = []
-        
+        print(self.hodd['dat_fnames'])
         for i in range(self.miter):
             fname = self.hodd['dat_fnames'][i]
             file_does_not_exist = not(os.path.isfile(fname))
+            
             if self.recompute_h or file_does_not_exist:
                 
                 print('* Computing H'+str(i)+'...')
@@ -2142,7 +2189,7 @@ class StrongCoupling(object):
                 print('* Loading H'+str(i)+'...')
                 data = np.loadtxt(self.hodd['dat_fnames'][i])
                 
-            if True:
+            if False:
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
                 ax.plot(data)
