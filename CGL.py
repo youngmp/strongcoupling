@@ -19,7 +19,7 @@ TODO:
 
 """
 
-from core.StrongCoupling import StrongCoupling
+from StrongCoupling import StrongCoupling
 
 # user-defined
 
@@ -77,17 +77,17 @@ def main():
     kwargs = {'recompute_LC':False,
               'recompute_monodromy':False,
               'recompute_g_sym':False,
-              'recompute_g':True,
+              'recompute_g':False,
               'recompute_het_sym':False,
-              'recompute_z':True,
-              'recompute_i':True,
+              'recompute_z':False,
+              'recompute_i':False,
               'recompute_k_sym':False,
               'recompute_p_sym':False,
-              'recompute_p':True,
+              'recompute_p':False,
               'recompute_h_sym':False,
-              'recompute_h':True,
+              'recompute_h':False,
               'g_forward':False,
-              'dir':'cgl_dat/',
+              'dir':'home+cgl_dat/',
               'trunc_order':9,
               'NA':501,
               'NB':501,
@@ -108,6 +108,5 @@ def main():
     
     
 if __name__ == "__main__":
-    __name__ = 'CGL'
     __spec__ = None
     main()
