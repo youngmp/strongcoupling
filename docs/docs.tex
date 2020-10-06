@@ -39,7 +39,7 @@
 \IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
 \IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
 \hypersetup{
-  pdftitle={StrongCoupling Documentation},
+  pdfauthor={Youngmin Park},
   pdflang={en},
   colorlinks=true,
   linkcolor=blue,
@@ -72,7 +72,9 @@
   \usepackage[shorthands=off,main=english]{babel}
 \fi
 
-\title{StrongCoupling Documentation}
+\title{High-Order Accuracy Coumputation of Coupling Functions for Strongly
+Coupled Oscllators (Documentation)}
+\author{Youngmin Park}
 \date{}
 
 \begin{document}
@@ -140,17 +142,17 @@ Note that in Ubuntu you may need to set up a virtual environment to be
 able to run the script. The system uses Python 3.6 by default and does
 not like it when the default is changed to Python 3.7.
 
+\begin{center}\rule{0.5\linewidth}{\linethickness}\end{center}
+
 \hypertarget{StrongCoupling}{%
 \section{\texorpdfstring{Module
 \texttt{StrongCoupling}}{Module StrongCoupling}}\label{StrongCoupling}}
-
-Created on Tue Sep 29 21:03:58 2020
 
 @author: Youngmin Park
 
 The logical flow of the class follows the paper by Wilson 2020. -produce
 heterogeneous terms for g for arbirary dx -substitute dx with g=g0 +
-psi\emph{g1 + psi\^{}2}g2+\ldots{} -produce het. terms for irc -\ldots{}
+psi\emph{g1 + psi\^{}2}g2+\ldots{} -produce het. terms for irc -
 
 this file is also practice for creating a more general class for any
 RHS.
@@ -725,6 +727,136 @@ def numerical_jac(
 \end{quote}
 
 return numerical Jacobian function
+
+\hypertarget{CGL}{%
+\section{\texorpdfstring{Module \texttt{CGL}}{Module CGL}}\label{CGL}}
+
+The logical flow of the class follows the paper by Wilson 2020. -produce
+heterogeneous terms for g for arbirary dx -substitute dx with g=g0 +
+psi\emph{g1 + psi\^{}2}g2+\ldots{} -produce het. terms for irc -
+
+this file is also practice for creating a more general class for any
+RHS.
+
+Todo -----= -make sure that np.dot and sym matrix products are
+consistent. -check that np.identity and sym.eye are consistent
+
+\hypertarget{functions-1}{%
+\subsection{Functions}\label{functions-1}}
+
+\hypertarget{CGL.coupling}{%
+\subsubsection{\texorpdfstring{Function
+\texttt{coupling}}{Function coupling}}\label{CGL.coupling}}
+
+\begin{quote}
+\begin{verbatim}
+def coupling(
+    vars_pair,
+    pdict,
+    option='value'
+)
+\end{verbatim}
+\end{quote}
+
+r\^{}(2n) to r\^{}n function. default parameter order is from
+perspective of first oscillator.
+
+in this case the input is (x1,y1,x2,y2) and the output is an R\^{}2 vec.
+
+\hypertarget{CGL.main}{%
+\subsubsection{\texorpdfstring{Function
+\texttt{main}}{Function main}}\label{CGL.main}}
+
+\begin{quote}
+\begin{verbatim}
+def main()
+\end{verbatim}
+\end{quote}
+
+\hypertarget{CGL.rhs}{%
+\subsubsection{\texorpdfstring{Function
+\texttt{rhs}}{Function rhs}}\label{CGL.rhs}}
+
+\begin{quote}
+\begin{verbatim}
+def rhs(
+    t,
+    z,
+    pdict,
+    option='value'
+)
+\end{verbatim}
+\end{quote}
+
+right-hand side of the equation of interest. CCGL model.
+
+write in standard python notation as if it will be used in an ODE
+solver.
+
+Returns
+
+\begin{description}
+\tightlist
+\item[\texttt{right-hand\ side\ equauation\ in\ terms} of the inputs. if
+x,y scalars,]
+~
+\end{description}
+
+return scalar. If x,y, sympy symbols, return symbol.
+
+\hypertarget{Thalamic}{%
+\section{\texorpdfstring{Module
+\texttt{Thalamic}}{Module Thalamic}}\label{Thalamic}}
+
+file for comparing to CGL. implement adjoint methods in Wilson 2020
+
+\url{https://stackoverflow.com/questions/49306092/parsing-a-symbolic-expression-that-includes-user-defined-functions-in-sympy}
+
+user-defined
+
+\hypertarget{functions-2}{%
+\subsection{Functions}\label{functions-2}}
+
+\hypertarget{Thalamic.coupling}{%
+\subsubsection{\texorpdfstring{Function
+\texttt{coupling}}{Function coupling}}\label{Thalamic.coupling}}
+
+\begin{quote}
+\begin{verbatim}
+def coupling(
+    vars_pair,
+    pdict,
+    option='val'
+)
+\end{verbatim}
+\end{quote}
+
+\hypertarget{Thalamic.main}{%
+\subsubsection{\texorpdfstring{Function
+\texttt{main}}{Function main}}\label{Thalamic.main}}
+
+\begin{quote}
+\begin{verbatim}
+def main()
+\end{verbatim}
+\end{quote}
+
+\hypertarget{Thalamic.rhs}{%
+\subsubsection{\texorpdfstring{Function
+\texttt{rhs}}{Function rhs}}\label{Thalamic.rhs}}
+
+\begin{quote}
+\begin{verbatim}
+def rhs(
+    t,
+    z,
+    pdict,
+    option='val'
+)
+\end{verbatim}
+\end{quote}
+
+right-hand side of the equation of interest. thalamic neural model.
 
 \begin{center}\rule{0.5\linewidth}{\linethickness}\end{center}
 

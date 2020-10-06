@@ -1,10 +1,10 @@
+"""
+file for comparing to CGL. implement adjoint methods in Wilson 2020
 
-# file for comparing to CGL. implement adjoint methods in Wilson 2020
+https://stackoverflow.com/questions/49306092/parsing-a-symbolic-expression-that-includes-user-defined-functions-in-sympy
 
-# https://stackoverflow.com/questions/49306092/...
-#parsing-a-symbolic-expression-that-includes-user-defined-functions-in-sympy
-
-# user-defined
+user-defined
+"""
 
 import numpy as np
 import sympy as sym

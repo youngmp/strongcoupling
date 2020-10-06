@@ -1,6 +1,6 @@
 ---
 description: |
-    API documentation for modules: StrongCoupling.
+    API documentation for modules: StrongCoupling, CGL, Thalamic.
 
 lang: en
 
@@ -16,15 +16,13 @@ links-as-notes: true
     
 # Module `StrongCoupling` {#StrongCoupling}
 
-Created on Tue Sep 29 21:03:58 2020
-
 @author: Youngmin Park
 
 The logical flow of the class follows the paper by Wilson 2020.
 -produce heterogeneous terms for g for arbirary dx
 -substitute dx with g=g0 + psi*g1 + psi^2*g2+...
 -produce het. terms for irc
--...
+-
 
 this file is also practice for creating a more general class for any RHS.
 
@@ -614,6 +612,149 @@ jacLC is the jacobian evaluated along the limit cycle
 
 
 return numerical Jacobian function
+
+
+
+    
+# Module `CGL` {#CGL}
+
+The logical flow of the class follows the paper by Wilson 2020.
+-produce heterogeneous terms for g for arbirary dx
+-substitute dx with g=g0 + psi*g1 + psi^2*g2+...
+-produce het. terms for irc
+-
+
+this file is also practice for creating a more general class for any RHS.
+
+
+Todo
+-----=
+-make sure that np.dot and sym matrix products are consistent.
+-check that np.identity and sym.eye are consistent
+
+
+
+
+    
+## Functions
+
+
+    
+### Function `coupling` {#CGL.coupling}
+
+
+
+
+>     def coupling(
+>         vars_pair,
+>         pdict,
+>         option='value'
+>     )
+
+
+r^(2n) to r^n function. default parameter order is from perspective of
+first oscillator.
+
+in this case the input is (x1,y1,x2,y2) and the output is an R^2 vec.
+
+    
+### Function `main` {#CGL.main}
+
+
+
+
+>     def main()
+
+
+
+
+    
+### Function `rhs` {#CGL.rhs}
+
+
+
+
+>     def rhs(
+>         t,
+>         z,
+>         pdict,
+>         option='value'
+>     )
+
+
+right-hand side of the equation of interest. CCGL model.
+
+write in standard python notation as if it will be used in an ODE solver.
+
+###### Returns
+
+`right-hand side equauation in terms` of <code>the inputs. if x,y scalars,</code>
+:   &nbsp;
+
+
+return scalar. If x,y, sympy symbols, return symbol.
+
+
+
+
+    
+# Module `Thalamic` {#Thalamic}
+
+file for comparing to CGL. implement adjoint methods in Wilson 2020
+
+<https://stackoverflow.com/questions/49306092/parsing-a-symbolic-expression-that-includes-user-defined-functions-in-sympy>
+
+user-defined
+
+
+
+
+    
+## Functions
+
+
+    
+### Function `coupling` {#Thalamic.coupling}
+
+
+
+
+>     def coupling(
+>         vars_pair,
+>         pdict,
+>         option='val'
+>     )
+
+
+
+
+    
+### Function `main` {#Thalamic.main}
+
+
+
+
+>     def main()
+
+
+
+
+    
+### Function `rhs` {#Thalamic.rhs}
+
+
+
+
+>     def rhs(
+>         t,
+>         z,
+>         pdict,
+>         option='val'
+>     )
+
+
+right-hand side of the equation of interest. thalamic neural model.
+
 
 
 -----

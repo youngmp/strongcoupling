@@ -3,16 +3,16 @@ pdoc3 0.9.1
 pandoc 2.7.3
 pdoc3 and pandoc installed using pip3
 
-To create docs, cd to project home, run the command
+To create docs, cd to project home, run the commands
 
-$ pdoc3 --pdf StrongCoupling > docs/docs.md
+$ pdoc3 --pdf StrongCoupling Thalamic CGL > docs/docstrings.md
 
-To compile the raw md file to PDF, run the command
+This command reads all the docstrings from the files StrongCoupling.py, Thalamic.py, and CGL.py and puts them into markdown format in docs/docstrings.md
 
-$ pandoc --metadata=title:"StrongCoupling Documentation"           \
-         --from=markdown+abbreviations+tex_math_single_backslash   \
-         --toc --toc-depth=4 --output=docs.tex -t latex -s docs0.md docs.md
+To convert the raw md file to tex and to include the intoductory text in README.md, cd to the docs directory and run the command
 
-docs0.md contains custom information generated outside of docstrings (introduction, recommended versions), and docs.md contains information straight from the docstrings.
+$ pandoc --from=markdown+abbreviations+tex_math_single_backslash --toc --toc-depth=4 --output=docs.tex -t latex -s ../README.md docstrings.md 
+
+../README.md contains custom information generated outside of docstrings (introduction, recommended versions). Make sure to put docstrings.md last because pdoc3 includes a footnote that disrupts any md text that comes after it
 
 -s flag enables standalone, so it generates the .tex file that can be compiled directly using PDFLaTeX.

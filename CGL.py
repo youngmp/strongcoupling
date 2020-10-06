@@ -9,7 +9,7 @@ The logical flow of the class follows the paper by Wilson 2020.
 -produce heterogeneous terms for g for arbirary dx
 -substitute dx with g=g0 + psi*g1 + psi^2*g2+...
 -produce het. terms for irc
--...
+-
 
 this file is also practice for creating a more general class for any RHS.
 
