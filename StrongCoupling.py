@@ -25,7 +25,7 @@ import lib_sym as slib
 import lib
 from interp_basic import interp_basic as interpb
 from interp2d_basic import interp2d_basic as interp2db
-from lam_vec import lam_vec
+#from lam_vec import lam_vec
 
 
 #import inspect
@@ -52,12 +52,25 @@ from sympy import sympify as s
 from sympy.physics.quantum import TensorProduct as kp
 from sympy.utilities.lambdify import lambdify, implemented_function
 
+#import pdoc
+
 imp_fn = implemented_function
+
+
 
 #from interpolate import interp1d
 #from scipy.interpolate import interp1d#, interp2d
 from scipy.interpolate import interp2d
 from scipy.integrate import solve_ivp
+
+def module_exists(module_name):
+    try:
+        __import__(module_name)
+    except ImportError:
+        return False
+    else:
+        return True
+
 
 class StrongCoupling(object):
     """
@@ -394,8 +407,11 @@ class StrongCoupling(object):
     def monodromy(self,t,z):
         """
         calculate right-hand side of system
-        \dot \Phi = J\Phi, \Phi(0)=I
-        \Phi is a matrix solution
+        
+        
+        $\dot \Phi = J\Phi, \Phi(0)=I$,
+        
+        where $\Phi$ is a matrix solution
         
         jacLC is the jacobian evaluated along the limit cycle
         """
@@ -505,15 +521,18 @@ class StrongCoupling(object):
         print('* LC period = '+str(self.T))
             
         # Make LC data callable from inside sympy
-        lam_list = []
+        imp_lc = sym.zeros(1,self.dim)
         for i,key in enumerate(self.var_names):
             fn = interpb(self.LC['t'],self.LC['dat'][:,i],self.T)
             #fn = interp1d(self.LC['t'],self.LC['dat'][:,i],self.T,kind='cubic')
             self.LC['imp_'+key] = imp_fn(key,fn)
             self.LC['lam_'+key] = fn
-            lam_list.append(self.LC['lam_'+key])
             
-        self.LC_vec = lam_vec(lam_list)
+            imp_lc[i] = self.LC['imp_'+key](self.t)
+            #lam_list.append(self.LC['lam_'+key])
+            
+        self.LC_vec = lambdify(self.t,imp_lc,modules='numpy')
+        #self.LC_vec = lam_vec(lam_list)
             
         if False:
             #print('lc init',self.LC['dat'][0,:])
@@ -2432,3 +2451,5 @@ class StrongCoupling(object):
         return si.dfitpack.bispeu(fn.tck[0], fn.tck[1],
                                   fn.tck[2], fn.tck[3],
                                   fn.tck[4], x, y)[0]
+
+
