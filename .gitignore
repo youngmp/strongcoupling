@@ -2,7 +2,6 @@
 *.pyc
 cgl_dat/cB.d
 *.d
-*.txt
 *.png
 *.py~
 *.pdf
