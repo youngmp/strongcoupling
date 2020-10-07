@@ -1,9 +1,7 @@
 """
-file for comparing to CGL. implement adjoint methods in Wilson 2020
+Example: Thalamic model from Wilson and Ermentrout RSTA 2019,
+Rubin and Terman JCNS 2004
 
-https://stackoverflow.com/questions/49306092/parsing-a-symbolic-expression-that-includes-user-defined-functions-in-sympy
-
-user-defined
 """
 
 import numpy as np
@@ -16,7 +14,31 @@ from StrongCoupling import StrongCoupling
 
 def rhs(t,z,pdict,option='val'):
         """
-        right-hand side of the equation of interest. thalamic neural model.
+        Right-hand side of the Thalamic model from Wilson and Ermentrout
+        RSTA 2019 and Rubin and Terman JCNS 2004
+        
+        
+        Parameters
+        
+            t : float or sympy object.
+                time
+            z : array or list of floats or sympy objects.
+                state variables of the thalamic model v, h, r, w.
+            pdict : dict of flots or sympy objects.
+                parameter dictionary pdict[key], val. key is always a string
+                of the parameter. val is either the parameter value (float) or 
+                the symbolic version of the parameter key.
+            option : string.
+                Set to 'val' when inputs, t, z, pdict are floats. Set to
+                'sym' when inputs t, z, pdict are sympy objects. The default
+                is 'val'.
+            
+        Returns
+            
+            numpy array or sympy Matrix
+                returns numpy array if option == 'val'
+                returns sympy Matrix if option == 'sym'
+            
         """
         
         if option == 'val':
@@ -62,6 +84,35 @@ def rhs(t,z,pdict,option='val'):
             #return Matrix([dv,dh,dr])
 
 def coupling(vars_pair,pdict,option='val'):
+        """
+        
+        Synaptic coupling function between Thalamic oscillators.
+        
+        E.g.,this Python function is the function $G(x_i,x_j)$
+        in the equation
+        $\\frac{dx_i}{dt} = F(x_i) + \\varepsilon G(x_i,x_j)$
+        
+        Parameters
+        
+            vars_pair : list or array
+                contains state variables from oscillator A and B, e.g.,
+                vA, hA, rA, wA, vB, hB, rB, wB  
+            pdict : dict of flots or sympy objects.
+                parameter dictionary pdict[key], val. key is always a string
+                of the parameter. val is either the parameter value (float) or 
+                the symbolic version of the parameter key.
+            option : string.
+                Set to 'val' when inputs, t, z, pdict are floats. Set to
+                'sym' when inputs t, z, pdict are sympy objects. The default
+                is 'val'.
+        
+        Returns
+            
+            numpy array or sympy Matrix
+                returns numpy array if option == 'val'. 
+                returns sympy Matrix if option == 'sym'
+    
+        """
         vA, hA, rA, wA, vB, hB, rB, wB = vars_pair
 
         if option == 'val':

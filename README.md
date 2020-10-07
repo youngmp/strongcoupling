@@ -14,6 +14,8 @@ StrongCoupling is a script for computing the higher-order coupling functions in 
 
 ## Dependencies
 
+All following libraries are required to make the script run.
+
 | Package	| Version	| Link		| 
 | -----------	| -----------	| -----------	|
 | Python	| 3.7.7		|
@@ -26,18 +28,18 @@ StrongCoupling is a script for computing the higher-order coupling functions in 
 
 Notes on depedendencies:
 
-Python 3.7+ is necessary. Our code often requires more than 256 function inputs. Python 3.6 or earlier versions have a limit of 256 inputs and will not work with our scripts.
+**Python 3.7+ is necessary**. Our code often requires more than 256 function inputs. Python 3.6 or earlier versions have a limit of 256 inputs and will not work with our scripts. The script will likely work with earlier versions of all other libraries.
 
-The script will likely work with earlier versions of all other libraries.
+### Other Notes
 
-pathos is necessary for parallel computing and because pickling is more robust. I use lots of sympy objects that the multiprocessing library often can not pickle. In contrast, pathos uses dill, which can often pickle objects that the pickle module can not.
+I intentially chose **pathos** over multiprocessing because pickling is more robust with pathos. Pathos uses dill, which can serialize far more objects compared to multiprocessing, which uses pickle.
 
-tqdm provides a status bar for parallel computing. It is not part of the engine, and the code can be modified to work without it. In future versions I may leave tqdm as a toggle.
+The code is written so that tqdm is necessary, but tqdm only provides a status bar during parallel computing. It is not part of the engine, and the code can be modified to work without it. In future versions I may leave tqdm as a toggle.
 
 ## Installation
 
-I will not release this script as an installable package simply because I do not have to time to maintain regular version releases for distribution platforms such as anaconda, pip, and apt. As long as your computer has the packages listed above and they are installed using Python 3.7, the script should run. Worst case scenario, yarrr matey a Windows 10 virutal machine and install everything using anaconda.
+As long as your computer has the packages listed above and they are installed using Python 3.7, the StrongCoupling script should run.
 
-Note that in Ubuntu you may need to set up a virtual environment to be able to run the script. The system uses Python 3.6 by default and does not like it when the default is changed to Python 3.7.
+I will not release the StrongCoupling script as an installable package simply because I do not have to time to maintain and track version releases for distribution platforms such as anaconda, pip, and apt. Worst case scenario, ``yarrr matey'' a Windows 10 virutal machine and install everything using anaconda.
 
------
+Note that in Ubuntu a virtual environment should be used to run the StrongCoupling script. Ubuntu uses Python 3.6 by default and does not like it when the default is changed to Python 3.7.

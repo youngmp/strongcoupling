@@ -1,21 +1,20 @@
 """
+StrongCoupling.py computes the higher-order interaction functions from
+Park and Wilson 2020 for $N=2$ models and one Floquet multiplier.
 
-@author: Youngmin Park
+In broad strokes, this library computes functions in the following order:
 
-The logical flow of the class follows the paper by Wilson 2020.
--produce heterogeneous terms for g for arbirary dx
--substitute dx with g=g0 + psi*g1 + psi^2*g2+...
--produce het. terms for irc
--
+* Use the equation for $\Delta x$ (15) to produce a hierarchy of
+ODEs for $g^{(k)}$ and solve. (Wilson 2020)
+* Do the same using (30) and (40) to generate a hierarchy of ODEs
+for $Z^{(k)}$ and $I^{(k)}$, respectively. (Wilson 2020)
+* Solve for $\phi$ in terms of $\\theta_i$, (13), (14) (Park and Wilson 2020)
+* Compute the higher-order interaction functions (15) (Park and Wilson 2020)
 
-this file is also practice for creating a more general class for any RHS.
 
-coupling functions for thalamic neurons from RTSA Ermentrout, Park, Wilson 2019
 
 Notes:
-    -PA requires endpoint=False. make sure corresponding dxAs are used.
-
-TODO: add backwards as an option for i,g,z.
+- ``pA`` requires endpoint=False. make sure corresponding `dxA`s are used.
 
 """
 import copy
@@ -72,10 +71,7 @@ def module_exists(module_name):
 
 
 class StrongCoupling(object):
-    """
-    Thalamic model from RSTA 2019
-    Requires sympy, numpy, matplotlib.
-    """
+    
     
     def __init__(self,rhs,coupling,LC_init,var_names,pardict,**kwargs):
 

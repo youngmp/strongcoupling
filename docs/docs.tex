@@ -95,6 +95,8 @@ of Coupling Functions for Strongly Coupled Oscillators''
 \hypertarget{dependencies}{%
 \subsection{Dependencies}\label{dependencies}}
 
+All following libraries are required to make the script run.
+
 \begin{longtable}[]{@{}lll@{}}
 \toprule
 Package & Version & Link\tabularnewline
@@ -112,58 +114,68 @@ Sympy & 1.6.2 & https://anaconda.org/anaconda/sympy\tabularnewline
 
 Notes on depedendencies:
 
-Python 3.7+ is necessary. Our code often requires more than 256 function
-inputs. Python 3.6 or earlier versions have a limit of 256 inputs and
-will not work with our scripts.
+\textbf{Python 3.7+ is necessary}. Our code often requires more than 256
+function inputs. Python 3.6 or earlier versions have a limit of 256
+inputs and will not work with our scripts. The script will likely work
+with earlier versions of all other libraries.
 
-The script will likely work with earlier versions of all other
-libraries.
+\hypertarget{other-notes}{%
+\subsubsection{Other Notes}\label{other-notes}}
 
-pathos is necessary for parallel computing and because pickling is more
-robust. I use lots of sympy objects that the multiprocessing library
-often can not pickle. In contrast, pathos uses dill, which can often
-pickle objects that the pickle module can not.
+I intentially chose \textbf{pathos} over multiprocessing because
+pickling is more robust with pathos. Pathos uses dill, which can
+serialize far more objects compared to multiprocessing, which uses
+pickle.
 
-tqdm provides a status bar for parallel computing. It is not part of the
-engine, and the code can be modified to work without it. In future
-versions I may leave tqdm as a toggle.
+The code is written so that tqdm is necessary, but tqdm only provides a
+status bar during parallel computing. It is not part of the engine, and
+the code can be modified to work without it. In future versions I may
+leave tqdm as a toggle.
 
 \hypertarget{installation}{%
 \subsection{Installation}\label{installation}}
 
-I will not release this script as an installable package simply because
-I do not have to time to maintain regular version releases for
-distribution platforms such as anaconda, pip, and apt. As long as your
-computer has the packages listed above and they are installed using
-Python 3.7, the script should run. Worst case scenario, yarrr matey a
-Windows 10 virutal machine and install everything using anaconda.
+As long as your computer has the packages listed above and they are
+installed using Python 3.7, the StrongCoupling script should run.
+
+I will not release the StrongCoupling script as an installable package
+simply because I do not have to time to maintain and track version
+releases for distribution platforms such as anaconda, pip, and apt.
+Worst case scenario, ``yarrr matey'' a Windows 10 virutal machine and
+install everything using anaconda.
 
 Note that in Ubuntu you may need to set up a virtual environment to be
-able to run the script. The system uses Python 3.6 by default and does
-not like it when the default is changed to Python 3.7.
-
-\begin{center}\rule{0.5\linewidth}{\linethickness}\end{center}
+able to run the StrongCoupling script. Ubuntu uses Python 3.6 by default
+and does not like it when the default is changed to Python 3.7.
 
 \hypertarget{StrongCoupling}{%
 \section{\texorpdfstring{Module
 \texttt{StrongCoupling}}{Module StrongCoupling}}\label{StrongCoupling}}
 
-@author: Youngmin Park
+StrongCoupling.py computes the higher-order interaction functions from
+Park and Wilson 2020 for \(N=2\) models and one Floquet multiplier.
 
-The logical flow of the class follows the paper by Wilson 2020. -produce
-heterogeneous terms for g for arbirary dx -substitute dx with g=g0 +
-psi\emph{g1 + psi\^{}2}g2+\ldots{} -produce het. terms for irc -
+In broad strokes, this library computes functions in the following
+order:
 
-this file is also practice for creating a more general class for any
-RHS.
+\begin{itemize}
+\tightlist
+\item
+  Use the equation for \(\Delta x\) (15) to produce a hierarchy of ODEs
+  for \(g^{(k)}\) and solve. (Wilson 2020)
+\item
+  Do the same using (30) and (40) to generate a hierarchy of ODEs for
+  \(Z^{(k)}\) and \(I^{(k)}\), respectively. (Wilson 2020)
+\item
+  Solve for \(\phi\) in terms of \(\theta_i\), (13), (14) (Park and
+  Wilson 2020)
+\item
+  Compute the higher-order interaction functions (15) (Park and Wilson
+  2020)
+\end{itemize}
 
-coupling functions for thalamic neurons from RTSA Ermentrout, Park,
-Wilson 2019
-
-Notes -----= -PA requires endpoint=False. make sure corresponding dxAs
-are used.
-
-TODO: add backwards as an option for i,g,z.
+Notes: - pA requires endpoint=False. make sure corresponding dxAs are
+used.
 
 \hypertarget{functions}{%
 \subsection{Functions}\label{functions}}
@@ -199,8 +211,6 @@ class StrongCoupling(
 )
 \end{verbatim}
 \end{quote}
-
-Thalamic model from RSTA 2019 Requires sympy, numpy, matplotlib.
 
 See the defaults dict below for allowed kwargs.
 
@@ -728,94 +738,15 @@ def numerical_jac(
 
 return numerical Jacobian function
 
-\hypertarget{CGL}{%
-\section{\texorpdfstring{Module \texttt{CGL}}{Module CGL}}\label{CGL}}
-
-The logical flow of the class follows the paper by Wilson 2020. -produce
-heterogeneous terms for g for arbirary dx -substitute dx with g=g0 +
-psi\emph{g1 + psi\^{}2}g2+\ldots{} -produce het. terms for irc -
-
-this file is also practice for creating a more general class for any
-RHS.
-
-Todo -----= -make sure that np.dot and sym matrix products are
-consistent. -check that np.identity and sym.eye are consistent
-
-\hypertarget{functions-1}{%
-\subsection{Functions}\label{functions-1}}
-
-\hypertarget{CGL.coupling}{%
-\subsubsection{\texorpdfstring{Function
-\texttt{coupling}}{Function coupling}}\label{CGL.coupling}}
-
-\begin{quote}
-\begin{verbatim}
-def coupling(
-    vars_pair,
-    pdict,
-    option='value'
-)
-\end{verbatim}
-\end{quote}
-
-r\^{}(2n) to r\^{}n function. default parameter order is from
-perspective of first oscillator.
-
-in this case the input is (x1,y1,x2,y2) and the output is an R\^{}2 vec.
-
-\hypertarget{CGL.main}{%
-\subsubsection{\texorpdfstring{Function
-\texttt{main}}{Function main}}\label{CGL.main}}
-
-\begin{quote}
-\begin{verbatim}
-def main()
-\end{verbatim}
-\end{quote}
-
-\hypertarget{CGL.rhs}{%
-\subsubsection{\texorpdfstring{Function
-\texttt{rhs}}{Function rhs}}\label{CGL.rhs}}
-
-\begin{quote}
-\begin{verbatim}
-def rhs(
-    t,
-    z,
-    pdict,
-    option='value'
-)
-\end{verbatim}
-\end{quote}
-
-right-hand side of the equation of interest. CCGL model.
-
-write in standard python notation as if it will be used in an ODE
-solver.
-
-Returns
-
-\begin{description}
-\tightlist
-\item[\texttt{right-hand\ side\ equauation\ in\ terms} of the inputs. if
-x,y scalars,]
-~
-\end{description}
-
-return scalar. If x,y, sympy symbols, return symbol.
-
 \hypertarget{Thalamic}{%
 \section{\texorpdfstring{Module
 \texttt{Thalamic}}{Module Thalamic}}\label{Thalamic}}
 
-file for comparing to CGL. implement adjoint methods in Wilson 2020
+Example: Thalamic model from Wilson and Ermentrout RSTA 2019, Rubin and
+Terman JCNS 2004
 
-\url{https://stackoverflow.com/questions/49306092/parsing-a-symbolic-expression-that-includes-user-defined-functions-in-sympy}
-
-user-defined
-
-\hypertarget{functions-2}{%
-\subsection{Functions}\label{functions-2}}
+\hypertarget{functions-1}{%
+\subsection{Functions}\label{functions-1}}
 
 \hypertarget{Thalamic.coupling}{%
 \subsubsection{\texorpdfstring{Function
@@ -830,6 +761,35 @@ def coupling(
 )
 \end{verbatim}
 \end{quote}
+
+Synaptic coupling function between Thalamic oscillators.
+
+E.g.,this Python function is the function \(G(x_i,x_j)\) in the equation
+\(\frac{dx_i}{dt} = F(x_i) + \varepsilon G(x_i,x_j)\)
+
+Parameters
+
+\begin{verbatim}
+vars_pair : list or array
+    contains state variables from oscillator A and B, e.g.,
+    vA, hA, rA, wA, vB, hB, rB, wB  
+pdict : dict of flots or sympy objects.
+    parameter dictionary pdict[key], val. key is always a string
+    of the parameter. val is either the parameter value (float) or 
+    the symbolic version of the parameter key.
+option : string.
+    Set to 'val' when inputs, t, z, pdict are floats. Set to
+    'sym' when inputs t, z, pdict are sympy objects. The default
+    is 'val'.
+\end{verbatim}
+
+Returns
+
+\begin{verbatim}
+numpy array or sympy Matrix
+    returns numpy array if option == 'val'. 
+    returns sympy Matrix if option == 'sym'
+\end{verbatim}
 
 \hypertarget{Thalamic.main}{%
 \subsubsection{\texorpdfstring{Function
@@ -856,9 +816,139 @@ def rhs(
 \end{verbatim}
 \end{quote}
 
-right-hand side of the equation of interest. thalamic neural model.
+Right-hand side of the Thalamic model from Wilson and Ermentrout RSTA
+2019 and Rubin and Terman JCNS 2004
 
-\begin{center}\rule{0.5\linewidth}{\linethickness}\end{center}
+Parameters
+
+\begin{verbatim}
+t : float or sympy object.
+    time
+z : array or list of floats or sympy objects.
+    state variables of the thalamic model v, h, r, w.
+pdict : dict of flots or sympy objects.
+    parameter dictionary pdict[key], val. key is always a string
+    of the parameter. val is either the parameter value (float) or 
+    the symbolic version of the parameter key.
+option : string.
+    Set to 'val' when inputs, t, z, pdict are floats. Set to
+    'sym' when inputs t, z, pdict are sympy objects. The default
+    is 'val'.
+\end{verbatim}
+
+Returns
+
+\begin{verbatim}
+numpy array or sympy Matrix
+    returns numpy array if option == 'val'
+    returns sympy Matrix if option == 'sym'
+\end{verbatim}
+
+\hypertarget{CGL}{%
+\section{\texorpdfstring{Module \texttt{CGL}}{Module CGL}}\label{CGL}}
+
+Example: Complex Ginzburgh-Landau (CGL) model from Wilson and Ermentrout
+RSTA 2019
+
+\hypertarget{functions-2}{%
+\subsection{Functions}\label{functions-2}}
+
+\hypertarget{CGL.coupling}{%
+\subsubsection{\texorpdfstring{Function
+\texttt{coupling}}{Function coupling}}\label{CGL.coupling}}
+
+\begin{quote}
+\begin{verbatim}
+def coupling(
+    vars_pair,
+    pdict,
+    option='value'
+)
+\end{verbatim}
+\end{quote}
+
+Diffusive coupling function between Complex Ginzburgh Landau (CGL)
+oscillators.
+
+E.g.,this Python function is the function \(G(x_i,x_j)\) in the equation
+\(\frac{dx_i}{dt} = F(x_i) + \varepsilon G(x_i,x_j)\)
+
+Parameters
+
+\begin{verbatim}
+vars_pair : list or array
+    contains state variables from oscillator A and B, e.g.,
+    x1,y1,x2,y2
+pdict : dict of flots or sympy objects.
+    parameter dictionary pdict[key], val. key is always a string
+    of the parameter. val is either the parameter value (float) or 
+    the symbolic version of the parameter key.
+option : string.
+    Set to 'val' when inputs, t, z, pdict are floats. Set to
+    'sym' when inputs t, z, pdict are sympy objects. The default
+    is 'val'.
+\end{verbatim}
+
+Returns
+
+\begin{verbatim}
+* numpy array or sympy Matrix
+    * returns numpy array if option == 'val'. 
+    returns sympy Matrix if option == 'sym'
+\end{verbatim}
+
+\hypertarget{CGL.main}{%
+\subsubsection{\texorpdfstring{Function
+\texttt{main}}{Function main}}\label{CGL.main}}
+
+\begin{quote}
+\begin{verbatim}
+def main()
+\end{verbatim}
+\end{quote}
+
+\hypertarget{CGL.rhs}{%
+\subsubsection{\texorpdfstring{Function
+\texttt{rhs}}{Function rhs}}\label{CGL.rhs}}
+
+\begin{quote}
+\begin{verbatim}
+def rhs(
+    t,
+    z,
+    pdict,
+    option='value'
+)
+\end{verbatim}
+\end{quote}
+
+Right-hand side of the Complex Ginzburgh-Landau (CGL) model from Wilson
+and Ermentrout RSTA 2019
+
+Parameters
+
+\begin{verbatim}
+t : float or sympy object.
+    time
+z : array or list of floats or sympy objects.
+    state variables of the thalamic model v, h, r, w.
+pdict : dict of flots or sympy objects.
+    parameter dictionary pdict[key], val. key is always a string
+    of the parameter. val is either the parameter value (float) or 
+    the symbolic version of the parameter key.
+option : string.
+    Set to 'val' when inputs, t, z, pdict are floats. Set to
+    'sym' when inputs t, z, pdict are sympy objects. The default
+    is 'val'.
+\end{verbatim}
+
+Returns
+
+\begin{verbatim}
+numpy array or sympy Matrix
+    returns numpy array if option == 'val'
+    returns sympy Matrix if option == 'sym'
+\end{verbatim}
 
 Generated by \emph{pdoc} 0.9.1 (\url{https://pdoc3.github.io}).
 
