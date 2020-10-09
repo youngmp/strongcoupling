@@ -55,45 +55,45 @@ def rhs(t,z,pdict,option='value'):
                        y*(1-R2)+pdict['q']*R2*x])
 
 def coupling(vars_pair,pdict,option='value'):
-        """
-        
-        Diffusive coupling function between Complex Ginzburgh Landau
-        (CGL) oscillators.
-        
-        E.g.,this Python function is the function $G(x_i,x_j)$
-        in the equation
-        $\\frac{dx_i}{dt} = F(x_i) + \\varepsilon G(x_i,x_j)$
-        
-        Parameters
-        
-            vars_pair : list or array
-                contains state variables from oscillator A and B, e.g.,
-                x1,y1,x2,y2
-            pdict : dict of flots or sympy objects.
-                parameter dictionary pdict[key], val. key is always a string
-                of the parameter. val is either the parameter value (float) or 
-                the symbolic version of the parameter key.
-            option : string.
-                Set to 'val' when inputs, t, z, pdict are floats. Set to
-                'sym' when inputs t, z, pdict are sympy objects. The default
-                is 'val'.
-        
-        Returns
-            
-            * numpy array or sympy Matrix
-                * returns numpy array if option == 'val'. 
-                returns sympy Matrix if option == 'sym'
-        
-        """
-        x1,y1,x2,y2 = vars_pair
-        
-        if option == 'value':
-            return np.array([x2-x1-pdict['d']*(y2-y1),
-                             y2-y1+pdict['d']*(x2-x1)])
-        elif option == 'sym':
-            return Matrix([x2-x1-pdict['d']*(y2-y1),
-                           y2-y1+pdict['d']*(x2-x1)])
+    """
     
+    Diffusive coupling function between Complex Ginzburgh Landau
+    (CGL) oscillators.
+    
+    E.g.,this Python function is the function $G(x_i,x_j)$
+    in the equation
+    $\\frac{dx_i}{dt} = F(x_i) + \\varepsilon G(x_i,x_j)$
+    
+    Parameters
+    
+        vars_pair : list or array
+            contains state variables from oscillator A and B, e.g.,
+            x1,y1,x2,y2
+        pdict : dict of flots or sympy objects.
+            parameter dictionary pdict[key], val. key is always a string
+            of the parameter. val is either the parameter value (float) or 
+            the symbolic version of the parameter key.
+        option : string.
+            Set to 'val' when inputs, t, z, pdict are floats. Set to
+            'sym' when inputs t, z, pdict are sympy objects. The default
+            is 'val'.
+    
+    Returns
+        
+        * numpy array or sympy Matrix
+            * returns numpy array if option == 'val'. 
+            returns sympy Matrix if option == 'sym'
+    
+    """
+    x1,y1,x2,y2 = vars_pair
+    
+    if option == 'value':
+        return np.array([x2-x1-pdict['d']*(y2-y1),
+                         y2-y1+pdict['d']*(x2-x1)])
+    elif option == 'sym':
+        return Matrix([x2-x1-pdict['d']*(y2-y1),
+                       y2-y1+pdict['d']*(x2-x1)])
+
 
 def main():
     

@@ -49,6 +49,44 @@
   pdfcreator={LaTeX via pandoc}}
 \urlstyle{same} % disable monospaced font for URLs
 \usepackage[margin=1in]{geometry}
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\newenvironment{Shaded}{}{}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.49,0.56,0.16}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.53,0.00,0.00}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.56,0.13,0.00}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.73,0.13,0.13}{\textit{#1}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.02,0.16,0.49}{#1}}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.40,0.40,0.40}{#1}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.74,0.48,0.00}{#1}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.73,0.40,0.53}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.10,0.09,0.49}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
 \usepackage{longtable,booktabs}
 % Correct order of tables after \paragraph or \subparagraph
 \usepackage{etoolbox}
@@ -144,9 +182,161 @@ releases for distribution platforms such as anaconda, pip, and apt.
 Worst case scenario, ``yarrr matey'' a Windows 10 virutal machine and
 install everything using anaconda.
 
-Note that in Ubuntu you may need to set up a virtual environment to be
-able to run the StrongCoupling script. Ubuntu uses Python 3.6 by default
-and does not like it when the default is changed to Python 3.7.
+Note that in Ubuntu a virtual environment should be used to run the
+StrongCoupling script. Ubuntu uses Python 3.6 by default and does not
+like it when the default is changed to Python 3.7.
+
+\hypertarget{set-up-a-model}{%
+\section{Set up a Model}\label{set-up-a-model}}
+
+Let's walk through setting up a script using the Goodwin oscillator
+(\href{https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1366510/}{Gonze et
+al 2005}):
+
+\[\frac{dX_i}{dt} = \nu_1 \frac{K_1^n}{K_1^n+Z_i^n} - \nu_2 \frac{X_i}{K_2 + X_i}+ \nu_c \frac{KF}{K_c + KF} + L,\]
+\[\frac{dY_i}{dt} = k_3 X_i - \nu_4 \frac{Y_i}{K_4 + Y_i},\]
+\[\frac{dZ_i}{dt} = k_5 Y_i - \nu_6 \frac{Z_i}{K_6 + Z_i}.\]
+
+The neurotransmitter concentration satisfies:
+
+\[\frac{dV_i}{dt} = k_7 X_i - \nu_8 \frac{V_i}{K_8 + V_i},\]
+
+and the coupling \(F\) is defined as
+
+\[F = \frac{1}{N}\sum_{i=1}^N V_i.\]
+
+To use StrongCoupling, define a right-hand side function with the name
+\texttt{rhs\textquotesingle{}\textquotesingle{},\ and\ a\ coupling\ function\ named}coupling''.
+rhs is defined for a single oscillator:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def}\NormalTok{ rhs(t,z,pdict,option}\OperatorTok{=}\StringTok{'value'}\NormalTok{):}
+\NormalTok{    x,y,z,v }\OperatorTok{=}\NormalTok{ z}
+    
+\NormalTok{    n }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'n'}\NormalTok{]}
+    
+\NormalTok{    nu1 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'nu1'}\NormalTok{]}
+\NormalTok{    nu2 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'nu2'}\NormalTok{]}
+\NormalTok{    nu4 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'nu4'}\NormalTok{]}
+\NormalTok{    nu6 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'nu6'}\NormalTok{]}
+\NormalTok{    nu8 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'nu8'}\NormalTok{]}
+    
+\NormalTok{    k1n }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'k1'}\NormalTok{]}\OperatorTok{**}\NormalTok{n}
+\NormalTok{    k2 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'k2'}\NormalTok{]}
+\NormalTok{    k3 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'k3'}\NormalTok{]}
+\NormalTok{    k4 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'k4'}\NormalTok{]}
+\NormalTok{    k5 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'k5'}\NormalTok{]}
+\NormalTok{    k6 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'k6'}\NormalTok{]}
+\NormalTok{    k7 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'k7'}\NormalTok{]}
+\NormalTok{    k8 }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'k8'}\NormalTok{]}
+    
+\NormalTok{    L }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'L'}\NormalTok{]}
+    
+\NormalTok{    dx }\OperatorTok{=}\NormalTok{ nu1}\OperatorTok{*}\NormalTok{k1n}\OperatorTok{/}\NormalTok{(k1n}\OperatorTok{+}\NormalTok{z}\OperatorTok{**}\NormalTok{n) }\OperatorTok{-}\NormalTok{ nu2}\OperatorTok{*}\NormalTok{x}\OperatorTok{/}\NormalTok{(k2}\OperatorTok{+}\NormalTok{x) }\OperatorTok{+}\NormalTok{ L}
+\NormalTok{    dy }\OperatorTok{=}\NormalTok{ k3}\OperatorTok{*}\NormalTok{x }\OperatorTok{-}\NormalTok{ nu4}\OperatorTok{*}\NormalTok{y}\OperatorTok{/}\NormalTok{(k4}\OperatorTok{+}\NormalTok{y)}
+\NormalTok{    dz }\OperatorTok{=}\NormalTok{ k5}\OperatorTok{*}\NormalTok{y }\OperatorTok{-}\NormalTok{ nu6}\OperatorTok{*}\NormalTok{z}\OperatorTok{/}\NormalTok{(k6}\OperatorTok{+}\NormalTok{z)}
+\NormalTok{    dv }\OperatorTok{=}\NormalTok{ k7}\OperatorTok{*}\NormalTok{x }\OperatorTok{-}\NormalTok{ nu8}\OperatorTok{*}\NormalTok{v}\OperatorTok{/}\NormalTok{(k8}\OperatorTok{+}\NormalTok{v)}
+    
+    \ControlFlowTok{if}\NormalTok{ option }\OperatorTok{==} \StringTok{'value'}\NormalTok{:}
+        \ControlFlowTok{return}\NormalTok{ np.array([dx,dy,dz,dv])}
+    \ControlFlowTok{elif}\NormalTok{ option }\OperatorTok{==} \StringTok{'sym'}\NormalTok{:}
+        \ControlFlowTok{return}\NormalTok{ Matrix([dx,dy,dz,dv])}
+\end{Highlighting}
+\end{Shaded}
+
+The input t is time and the input z is an array or list containing all
+the variables. pdict contains all the parameters in a dictionary. It is
+important to pdict treat as a dict because the rhs function plays two
+roles. One, the rhs function is put into scipy ODE solvers, in which
+case pdict contains key-value pairs of parameters and floats. Two, we
+sometimes take symbolic derivatives of the rhs function, in which case
+pdict contains key-value pairs of parameters and sympy objects. The
+option input is used by StrongCoupling to help the rhs function return
+the correct format for numeric or symbolic manipulation.
+
+The coupling fnction is defined for a single oscillator from the
+perspective of the first oscillator:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def}\NormalTok{ coupling(vars_pair,pdict,option}\OperatorTok{=}\StringTok{'value'}\NormalTok{):}
+\NormalTok{    x1,y1,z1,v1,x2,y2,z2,v2 }\OperatorTok{=}\NormalTok{ vars_pair}
+    
+\NormalTok{    K }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'K'}\NormalTok{]}
+\NormalTok{    nuc }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'nuc'}\NormalTok{]}
+\NormalTok{    F }\OperatorTok{=} \FloatTok{0.5}\OperatorTok{*}\NormalTok{(v1}\OperatorTok{+}\NormalTok{v2)}
+    
+    \ControlFlowTok{if}\NormalTok{ option }\OperatorTok{==} \StringTok{'value'}\NormalTok{:}
+        \ControlFlowTok{return}\NormalTok{ np.array([nuc}\OperatorTok{*}\NormalTok{K}\OperatorTok{*}\NormalTok{F,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{])}
+    \ControlFlowTok{elif}\NormalTok{ option }\OperatorTok{==} \StringTok{'sym'}\NormalTok{:}
+        \ControlFlowTok{return}\NormalTok{ Matrix([nuc}\OperatorTok{*}\NormalTok{K}\OperatorTok{*}\NormalTok{F,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{])}
+\end{Highlighting}
+\end{Shaded}
+
+Next, define a main() function where we define the variables, parameter
+dictionary, keyword options, limit cycle initial condition, and the
+StrongCoupling call.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def}\NormalTok{ main():}
+\NormalTok{    var_names }\OperatorTok{=}\NormalTok{ [}\StringTok{'x'}\NormalTok{,}\StringTok{'y'}\NormalTok{,}\StringTok{'z'}\NormalTok{,}\StringTok{'v'}\NormalTok{]}
+\NormalTok{    pardict }\OperatorTok{=}\NormalTok{ \{}\StringTok{'v1_val'}\NormalTok{:.}\DecValTok{7}\NormalTok{,}
+               \StringTok{'v2_val'}\NormalTok{:.}\DecValTok{35}\NormalTok{,}
+               \StringTok{'v4_val'}\NormalTok{:.}\DecValTok{35}\NormalTok{,}
+               \StringTok{'v6_val'}\NormalTok{:.}\DecValTok{35}\NormalTok{,}
+               \StringTok{'v8_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
+               \StringTok{'k1_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
+               \StringTok{'k2_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
+               \StringTok{'k3_val'}\NormalTok{:.}\DecValTok{7}\NormalTok{,}
+               \StringTok{'k4_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
+               \StringTok{'k5_val'}\NormalTok{:.}\DecValTok{7}\NormalTok{,}
+               \StringTok{'k6_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
+               \StringTok{'k7_val'}\NormalTok{:.}\DecValTok{35}\NormalTok{,}
+               \StringTok{'k8_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
+               \StringTok{'n_val'}\NormalTok{:}\DecValTok{7}\NormalTok{,}
+               \StringTok{'eps_val'}\NormalTok{:}\DecValTok{0}\NormalTok{,}
+               \StringTok{'d_val'}\NormalTok{:}\DecValTok{1}\NormalTok{\}}
+               
+\NormalTok{    kwargs }\OperatorTok{=}\NormalTok{ \{}\StringTok{'recompute_LC'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'recompute_monodromy'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'recompute_g_sym'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'recompute_g'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'recompute_het_sym'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'recompute_z'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'recompute_i'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'recompute_k_sym'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'recompute_p_sym'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'recompute_p'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'recompute_h_sym'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'recompute_h'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'g_forward'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'dir'}\NormalTok{:}\StringTok{'home+cgl_dat/'}\NormalTok{,}
+              \StringTok{'trunc_order'}\NormalTok{:}\DecValTok{9}\NormalTok{,}
+              \StringTok{'NA'}\NormalTok{:}\DecValTok{501}\NormalTok{,}
+              \StringTok{'NB'}\NormalTok{:}\DecValTok{501}\NormalTok{,}
+              \StringTok{'p_iter'}\NormalTok{:}\DecValTok{10}\NormalTok{,}
+              \StringTok{'TN'}\NormalTok{:}\DecValTok{20000}\NormalTok{,}
+              \StringTok{'rtol'}\NormalTok{:}\FloatTok{1e-13}\NormalTok{,}
+              \StringTok{'atol'}\NormalTok{:}\FloatTok{1e-13}\NormalTok{,}
+              \StringTok{'rel_tol'}\NormalTok{:}\FloatTok{1e-10}\NormalTok{,}
+              \StringTok{'method'}\NormalTok{:}\StringTok{'LSODA'}\NormalTok{,}
+              \StringTok{'load_all'}\NormalTok{:}\VariableTok{True}\NormalTok{\}}
+              
+\NormalTok{    T_init }\OperatorTok{=} \DecValTok{2}\OperatorTok{*}\NormalTok{np.pi}
+\NormalTok{    LC_init }\OperatorTok{=}\NormalTok{ np.array([}\DecValTok{1}\NormalTok{,}\DecValTok{0}\NormalTok{,T_init])}
+    
+    \CommentTok{# for NIC, 3rd derivatives go away, so we only need trunc_gh=3.}
+\NormalTok{    a }\OperatorTok{=}\NormalTok{ StrongCoupling(rhs,coupling,LC_init,var_names,pardict,}\OperatorTok{**}\NormalTok{kwargs)}
+\end{Highlighting}
+\end{Shaded}
+
+Please see the StrongCoupling class below for more details on these
+keyword arguments. It is not necessary to define the kwargs dict as
+shown above. I prefer to keep the kwargs options explicit in a
+dictionary because the defaults often change (see StrongCoupling.py for
+the default kwargs).
 
 \hypertarget{StrongCoupling}{%
 \section{\texorpdfstring{Module
@@ -220,23 +410,113 @@ at '\_' and uses the string to the left as the sympy parmeter name.
 
 Reserved names: \ldots{}
 
-g\_forward: list or bool. If bool, integrate forwards or backwards when
-computing g\^{}k. If list, integrate g\^{}k forwards or backwards based
-on bool value g\_forward{[}k{]} z\_forward: list or bool. Same idea as
-g\_forward for PRCS i\_forward: list or bool. Same idea as g\_forward
-for IRCS
-
-g\_bad\_dx: list or bool. If bool, use another variable to increase the
-magnitude of the Newton derivative. This can only be determined after
-attempting to run simulations and seeing that the Jacobian for the
-Newton step is ill-conditioned. If list, check for ill-conditioning for
-each order k. For example, we use g\_small\_dx =
-{[}False,True,False,\ldots,False{]} for the thalamic model. The CGL
-model only needs g\_small\_idx = False z\_bad\_idx: same idea as
-g\_small\_idx for PRCs i\_bad\_idx: same idea as g\_small\_idx for IRCs
-
-coupling\_pars: str. example: input '\_d='+str(d\_par) to include the d
-parameter d\_par in the hodd function name.
+\begin{verbatim}
+rhs: callable.
+    right-hand side of a model
+coupling: callable.
+    coupling function between oscillators
+LC_init: list or numpy array.
+    initial condition of limit cycle (must be found manually).
+    XPP is useful, otherwise integrate your RHS for various
+    initial conditions for long times and extract an initial
+    condition close to the limit cycle.
+var_names: list.
+    list of variable names as strings
+pardict: dict.
+    dictionary of parameter values. dict['par1_val'] = float.
+    Make sure to use par_val format, where each parameter name is
+    followed by _val.
+recompute_LC: bool.
+    If True, recompute limit cycle. If false, load limit cycle if
+    limit cycle data exists. Otherwise, compute. Default: False.
+recompute_monodromy: bool.
+    If true, recompute kappa, the FLoquet multiplier using the
+    monodromy matrix. If false, load kappa if data exists,
+    otherwise compute. Default: False.
+recompute_g_sym: bool.
+    If true, recompute the symbolic equations for g^k. If false,
+    load the symbolic equations if they exist in storage.
+    Otherwise, compute. Default: False.
+recompute_g: bool.
+    If true, recompute the ODEs for g^k. If false,
+    load the data for g^k if they exist in storage.
+    Otherwise, compute. Default: False.
+recompute_het_sym: bool.
+    If true, recompute the symbolic equations for z^k and i^k.
+    If false, load the symbolic equations if they exist in
+    storage. Otherwise, compute. Default: False.
+recompute_z: bool.
+    If true, recompute the ODEs for z^k. If false,
+    load the data for z^k if they exist in storage.
+    Otherwise, compute. Default: False.
+recompute_i: bool.
+    If true, recompute the ODEs for i^k. If false,
+    load the data for i^k if they exist in storage.
+    Otherwise, compute. Default: False.
+recompute_k_sym: bool.
+    If true, recompute the symbolic equations for K^k. If false,
+    load the symbolic equations if they exist in storage.
+    Otherwise, compute. Default: False.
+recompute_p_sym: bool.
+    If true, recompute the symbolic equations for p^k. If false,
+    load the symbolic equations if they exist in storage.
+    Otherwise, compute. Default: False.
+recompute_k_sym: bool.
+    If true, recompute the symbolic equations for H^k. If false,
+    load the symbolic equations if they exist in storage.
+    Otherwise, compute. Default: False.
+recompute_h: bool.
+    If true, recompute the H functions for H^k. If false,
+    load the data equations if they exist in storage.
+    Otherwise, compute. Default: False.
+g_forward: list or bool.
+    If bool, integrate forwards or backwards
+    when computing g^k. If list, integrate g^k forwards or
+    backwards based on bool value g_forward[k].
+    Default: False.
+z_forward: list or bool.
+    Same idea as g_forward for PRCS. Default: False.
+i_forward: list or bool.
+    Same idea as g_forward for IRCS. Default: False.
+dir: str.
+    Location of data directory. Please choose carefully
+    because some outputs may be on the order of gigabytes
+    if NA >= 5000. Write 'home+data_dir/' to save to the folder
+    'data_dir' in the home directory. Otherwise the script
+    will use the current working directory by default uless
+    an absolute path is used. The trailing '/' is
+    required. Default: None.
+trunc_order: int.
+    Highest order to truncate the expansion. For example, 
+    trunc_order = 3 means the code will compute up to and 
+    including order 3. Default: 3.
+NA: int.
+    Number of partitions to discretize phase when computing p.
+    Default: 500.
+p_iter: int.
+    Number of periods to integrate when computing the time 
+    interal in p. Default: 10.
+TN: int.
+    Total time steps when computing g, z, i.
+rtol, atol: float.
+    Relative and absolute tolerance for ODE solvers.
+    Defaults: 1e-7, 1e-7.
+rel_tol: float.
+    Threshold for use in Newton scheme. Default: 1e-6.
+method: string.
+    Specify the method used in scipy.integrate.solve_ivp.
+    Default: LSODA.
+g_bad_dx: list or bool. If bool, use another variable to increase
+    the magnitude of the Newton derivative. This can only be
+    determined after attempting to run simulations and seeing that
+    the Jacobian for the Newton step is ill-conditioned. If list,
+    check for ill-conditioning for each order k.
+    For example, we use g_small_dx = [False,True,False,...,False]
+    for the thalamic model. The CGL model only needs
+    g_small_idx = False
+z_bad_idx: same idea as g_small_idx for PRCs
+i_bad_idx: same idea as g_small_idx for IRCs
+\end{verbatim}
 
 \hypertarget{methods}{%
 \paragraph{Methods}\label{methods}}

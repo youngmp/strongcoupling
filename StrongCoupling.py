@@ -18,11 +18,11 @@ Notes:
 
 """
 import copy
-import lib_sym as slib
+import lib.lib_sym as slib
 
-import lib
-from interp_basic import interp_basic as interpb
-from interp2d_basic import interp2d_basic as interp2db
+import lib.lib
+from lib.interp_basic import interp_basic as interpb
+from lib.interp2d_basic import interp2d_basic as interp2db
 #from lam_vec import lam_vec
 
 
@@ -84,26 +84,113 @@ class StrongCoupling(object):
         string to the left as the sympy parmeter name.
         
         Reserved names: ...
+            
+            rhs: callable.
+                right-hand side of a model
+            coupling: callable.
+                coupling function between oscillators
+            LC_init: list or numpy array.
+                initial condition of limit cycle (must be found manually).
+                XPP is useful, otherwise integrate your RHS for various
+                initial conditions for long times and extract an initial
+                condition close to the limit cycle.
+            var_names: list.
+                list of variable names as strings
+            pardict: dict.
+                dictionary of parameter values. dict['par1_val'] = float.
+                Make sure to use par_val format, where each parameter name is
+                followed by _val.
+            recompute_LC: bool.
+                If True, recompute limit cycle. If false, load limit cycle if
+                limit cycle data exists. Otherwise, compute. Default: False.
+            recompute_monodromy: bool.
+                If true, recompute kappa, the FLoquet multiplier using the
+                monodromy matrix. If false, load kappa if data exists,
+                otherwise compute. Default: False.
+            recompute_g_sym: bool.
+                If true, recompute the symbolic equations for g^k. If false,
+                load the symbolic equations if they exist in storage.
+                Otherwise, compute. Default: False.
+            recompute_g: bool.
+                If true, recompute the ODEs for g^k. If false,
+                load the data for g^k if they exist in storage.
+                Otherwise, compute. Default: False.
+            recompute_het_sym: bool.
+                If true, recompute the symbolic equations for z^k and i^k.
+                If false, load the symbolic equations if they exist in
+                storage. Otherwise, compute. Default: False.
+            recompute_z: bool.
+                If true, recompute the ODEs for z^k. If false,
+                load the data for z^k if they exist in storage.
+                Otherwise, compute. Default: False.
+            recompute_i: bool.
+                If true, recompute the ODEs for i^k. If false,
+                load the data for i^k if they exist in storage.
+                Otherwise, compute. Default: False.
+            recompute_k_sym: bool.
+                If true, recompute the symbolic equations for K^k. If false,
+                load the symbolic equations if they exist in storage.
+                Otherwise, compute. Default: False.
+            recompute_p_sym: bool.
+                If true, recompute the symbolic equations for p^k. If false,
+                load the symbolic equations if they exist in storage.
+                Otherwise, compute. Default: False.
+            recompute_k_sym: bool.
+                If true, recompute the symbolic equations for H^k. If false,
+                load the symbolic equations if they exist in storage.
+                Otherwise, compute. Default: False.
+            recompute_h: bool.
+                If true, recompute the H functions for H^k. If false,
+                load the data equations if they exist in storage.
+                Otherwise, compute. Default: False.
+            g_forward: list or bool.
+                If bool, integrate forwards or backwards
+                when computing g^k. If list, integrate g^k forwards or
+                backwards based on bool value g_forward[k].
+                Default: False.
+            z_forward: list or bool.
+                Same idea as g_forward for PRCS. Default: False.
+            i_forward: list or bool.
+                Same idea as g_forward for IRCS. Default: False.
+            dir: str.
+                Location of data directory. Please choose carefully
+                because some outputs may be on the order of gigabytes
+                if NA >= 5000. Write 'home+data_dir/' to save to the folder
+                'data_dir' in the home directory. Otherwise the script
+                will use the current working directory by default uless
+                an absolute path is used. The trailing '/' is
+                required. Default: None.
+            trunc_order: int.
+                Highest order to truncate the expansion. For example, 
+                trunc_order = 3 means the code will compute up to and 
+                including order 3. Default: 3.
+            NA: int.
+                Number of partitions to discretize phase when computing p.
+                Default: 500.
+            p_iter: int.
+                Number of periods to integrate when computing the time 
+                interal in p. Default: 10.
+            TN: int.
+                Total time steps when computing g, z, i.
+            rtol, atol: float.
+                Relative and absolute tolerance for ODE solvers.
+                Defaults: 1e-7, 1e-7.
+            rel_tol: float.
+                Threshold for use in Newton scheme. Default: 1e-6.
+            method: string.
+                Specify the method used in scipy.integrate.solve_ivp.
+                Default: LSODA.
+            g_bad_dx: list or bool. If bool, use another variable to increase
+                the magnitude of the Newton derivative. This can only be
+                determined after attempting to run simulations and seeing that
+                the Jacobian for the Newton step is ill-conditioned. If list,
+                check for ill-conditioning for each order k.
+                For example, we use g_small_dx = [False,True,False,...,False]
+                for the thalamic model. The CGL model only needs
+                g_small_idx = False
+            z_bad_idx: same idea as g_small_idx for PRCs
+            i_bad_idx: same idea as g_small_idx for IRCs
         
-        g_forward: list or bool. If bool, integrate forwards or backwards
-            when computing g^k. If list, integrate g^k forwards or backwards
-            based on bool value g_forward[k]
-        z_forward: list or bool. Same idea as g_forward for PRCS
-        i_forward: list or bool. Same idea as g_forward for IRCS
-        
-        g_bad_dx: list or bool. If bool, use another variable to increase
-            the magnitude of the Newton derivative. This can only be
-            determined after attempting to run simulations and seeing that
-            the Jacobian for the Newton step is ill-conditioned. If list,
-            check for ill-conditioning for each order k.
-            For example, we use g_small_dx = [False,True,False,...,False]
-            for the thalamic model. The CGL model only needs
-            g_small_idx = False
-        z_bad_idx: same idea as g_small_idx for PRCs
-        i_bad_idx: same idea as g_small_idx for IRCs
-        
-        coupling_pars: str. example: input '_d='+str(d_par) to include the d
-            parameter d_par in the hodd function name.
         """
 
         defaults = {
@@ -113,8 +200,7 @@ class StrongCoupling(object):
             'dir':None,
             
             'NA':500,
-            'NB':500,
-            'p_iter':25,
+            'p_iter':10,
             
             'rtol':1e-7,
             'atol':1e-7,
@@ -2440,7 +2526,7 @@ class StrongCoupling(object):
     def bispeu(self,fn,x,y):
         """
         silly workaround
-        https://stackoverflow.com/questions/47087109/...
+        https://stackoverflow.com/questions/47087109/\
         evaluate-the-output-from-scipy-2d-interpolation-along-a-curve
         """
         return si.dfitpack.bispeu(fn.tck[0], fn.tck[1],
