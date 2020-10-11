@@ -105,69 +105,53 @@ def coupling(vars_pair,pdict,option='value'):
 	x1,y1,z1,v1,x2,y2,z2,v2 = vars_pair
 	
 	K = pdict['K']
-	nuc = pdict['nuc']
+	vc = pdict['eps']
 	F = 0.5*(v1+v2)
 	
 	if option == 'value':
-		return np.array([nuc*K*F,0,0,0])
+		return np.array([vc*K*F,0,0,0])
 	elif option == 'sym':
-		return Matrix([nuc*K*F,0,0,0])
+		return Matrix([vc*K*F,0,0,0])
 ```
 
-Next, define a main() function where we define the variables, parameter dictionary, keyword options, limit cycle initial condition, and the StrongCoupling call.
+Note that the parameter vc is the coupling parameter in the paper, so we let it take the value of the parameter epsilon. Next, define a main() function where we define the variables, parameter dictionary, keyword options, limit cycle initial condition, and the StrongCoupling call.
 
 ```python
 def main():
 	var_names = ['x','y','z','v']
-	pardict = {'v1_val':.7,
-               'v2_val':.35,
-               'v4_val':.35,
-               'v6_val':.35,
-               'v8_val':1,
-               'k1_val':1,
-               'k2_val':1,
-               'k3_val':.7,
-               'k4_val':1,
-               'k5_val':.7,
-               'k6_val':1,
-               'k7_val':.35,
-               'k8_val':1,
-               'n_val':7,
-               'eps_val':0,
-               'd_val':1}
-			   
-	kwargs = {'recompute_LC':False,
-              'recompute_monodromy':False,
-              'recompute_g_sym':False,
-              'recompute_g':False,
-              'recompute_het_sym':False,
-              'recompute_z':False,
-              'recompute_i':False,
-              'recompute_k_sym':False,
-              'recompute_p_sym':False,
-              'recompute_p':False,
-              'recompute_h_sym':False,
-              'recompute_h':False,
-              'g_forward':False,
-              'dir':'home+cgl_dat/',
-              'trunc_order':9,
-              'NA':501,
-              'NB':501,
-              'p_iter':10,
-              'TN':20000,
+    pardict = {'v1_val':.84,'v2_val':.42,'v4_val':.35,'v6_val':.35,'v8_val':1,
+               'k1_val':1,'k2_val':1,'k3_val':.7,'k4_val':1,'k5_val':.7,
+               'k6_val':1,'k7_val':.35,'k8_val':1,'K_val':0.5,'kc_val':1,
+               'n_val':6,'L_val':0,'eps_val':0}
+    
+    kwargs = {'g_forward':True,'z_forward':False,'i_forward':False,
+              'i_bad_dx':[False,True,False,False,False,False],
+              'dense':True,
+              'dir':'home+goodwin_dat/',
+              'trunc_order':5,
+              'trunc_deriv':5,
+              'NA':2000,
+              'p_iter':20,
+              'max_iter':200,
+              'TN':2000,
               'rtol':1e-13,
               'atol':1e-13,
               'rel_tol':1e-10,
-              'method':'LSODA',
-              'load_all':True}
+              'method':'LSODA'}
 			  
-	T_init = 2*np.pi
-    LC_init = np.array([1,0,T_init])
+	T_init = 23.54
+    LC_init = np.array([.1734,.39,1.8814,.2708,T_init])
     
-    # for NIC, 3rd derivatives go away, so we only need trunc_gh=3.
     a = StrongCoupling(rhs,coupling,LC_init,var_names,pardict,**kwargs)
 ```
 
-Please see the StrongCoupling class below for more details on these keyword arguments. It is not necessary to define the kwargs dict as shown above. I prefer to keep the kwargs options explicit in a dictionary because the defaults often change (see StrongCoupling.py for the default kwargs).
+Please see the StrongCoupling class below for more details on these keyword arguments. It is not necessary to define the kwargs dict as shown above -- keyword arguments may be entered in the standard keyword=value format straightt into the StrongCoupling class. I prefer to keep the kwargs options explicit in a dictionary because I may change the defaults.
 
-The limit cycle initial condition must be estimated by hand. For example, I used XPP and simulated the limit cycle for a long time, then extracted x, y, z, v values at some large time value.
+The parameters
+    g_forward, z_forward, i_forward
+test
+
+The limit cycle initial condition must be estimated by hand. For example, I used XPP and simulated the limit cycle for a long time, then extracted x, y, z, v values at some large time value. The XPP file for this oscillator is contained in ode/goodwin.ode. The initial condition and period do not need to be precise because the code will search for the limit cycle via Newton's method, but closer is better.
+
+
+
