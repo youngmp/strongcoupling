@@ -150,6 +150,9 @@ Reserved names: ...
         Same idea as g_forward for PRCS. Default: False.
     i_forward: list or bool.
         Same idea as g_forward for IRCS. Default: False.
+    dense: bool.
+        If True, solve_ivp uses dense=True and evaluate solution
+        along tLC.
     dir: str.
         Location of data directory. Please choose carefully
         because some outputs may be on the order of gigabytes
@@ -168,6 +171,8 @@ Reserved names: ...
     p_iter: int.
         Number of periods to integrate when computing the time 
         interal in p. Default: 10.
+    max_iter: int.
+        Number of Newton iterations. Default: 20.
     TN: int.
         Total time steps when computing g, z, i.
     rtol, atol: float.
@@ -186,7 +191,7 @@ Reserved names: ...
         For example, we use g_small_dx = [False,True,False,...,False]
         for the thalamic model. The CGL model only needs
         g_small_idx = False
-    z_bad_idx: same idea as g_small_idx for PRCs
+    z_Gbad_idx: same idea as g_small_idx for PRCs
     i_bad_idx: same idea as g_small_idx for IRCs
 
 
@@ -214,80 +219,7 @@ Reserved names: ...
 
 
 silly workaround
-<https://stackoverflow.com/questions/47087109/...>
-evaluate-the-output-from-scipy-2d-interpolation-along-a-curve
-
-    
-##### Method `dg` {#StrongCoupling.StrongCoupling.dg}
-
-
-
-
->     def dg(
->         self,
->         t,
->         z,
->         order,
->         het_vec
->     )
-
-
-g functon rhs with ith het. term
-
-z: position
-t: time
-jacLC: jacobian on LC
-het: heterogeneous terms
-
-order determines the Taylor expansion term
-
-    
-##### Method `di` {#StrongCoupling.StrongCoupling.di}
-
-
-
-
->     def di(
->         self,
->         t,
->         z,
->         order,
->         het_vec
->     )
-
-
-g functon rhs with ith het. term
-
-z: position
-t: time
-jacLC: jacobian on LC
-het: heterogeneous terms
-
-order determines the Taylor expansion term
-
-    
-##### Method `dz` {#StrongCoupling.StrongCoupling.dz}
-
-
-
-
->     def dz(
->         self,
->         t,
->         z,
->         order,
->         het_vec
->     )
-
-
-g functon rhs with ith het. term
-
-z: position
-t: time
-jacLC: jacobian on LC
-het: heterogeneous terms
-
-order determines the Taylor expansion term
+<https://stackoverflow.com/questions/47087109/>        evaluate-the-output-from-scipy-2d-interpolation-along-a-curve
 
     
 ##### Method `fLam2` {#StrongCoupling.StrongCoupling.fLam2}

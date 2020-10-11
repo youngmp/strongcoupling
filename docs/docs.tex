@@ -264,68 +264,47 @@ perspective of the first oscillator:
 \NormalTok{    x1,y1,z1,v1,x2,y2,z2,v2 }\OperatorTok{=}\NormalTok{ vars_pair}
     
 \NormalTok{    K }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'K'}\NormalTok{]}
-\NormalTok{    nuc }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'nuc'}\NormalTok{]}
+\NormalTok{    vc }\OperatorTok{=}\NormalTok{ pdict[}\StringTok{'eps'}\NormalTok{]}
 \NormalTok{    F }\OperatorTok{=} \FloatTok{0.5}\OperatorTok{*}\NormalTok{(v1}\OperatorTok{+}\NormalTok{v2)}
     
     \ControlFlowTok{if}\NormalTok{ option }\OperatorTok{==} \StringTok{'value'}\NormalTok{:}
-        \ControlFlowTok{return}\NormalTok{ np.array([nuc}\OperatorTok{*}\NormalTok{K}\OperatorTok{*}\NormalTok{F,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{])}
+        \ControlFlowTok{return}\NormalTok{ np.array([vc}\OperatorTok{*}\NormalTok{K}\OperatorTok{*}\NormalTok{F,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{])}
     \ControlFlowTok{elif}\NormalTok{ option }\OperatorTok{==} \StringTok{'sym'}\NormalTok{:}
-        \ControlFlowTok{return}\NormalTok{ Matrix([nuc}\OperatorTok{*}\NormalTok{K}\OperatorTok{*}\NormalTok{F,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{])}
+        \ControlFlowTok{return}\NormalTok{ Matrix([vc}\OperatorTok{*}\NormalTok{K}\OperatorTok{*}\NormalTok{F,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{])}
 \end{Highlighting}
 \end{Shaded}
 
-Next, define a main() function where we define the variables, parameter
-dictionary, keyword options, limit cycle initial condition, and the
-StrongCoupling call.
+Note that the parameter vc is the coupling parameter in the paper, so we
+let it take the value of the parameter epsilon. Next, define a main()
+function where we define the variables, parameter dictionary, keyword
+options, limit cycle initial condition, and the StrongCoupling call.
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{def}\NormalTok{ main():}
 \NormalTok{    var_names }\OperatorTok{=}\NormalTok{ [}\StringTok{'x'}\NormalTok{,}\StringTok{'y'}\NormalTok{,}\StringTok{'z'}\NormalTok{,}\StringTok{'v'}\NormalTok{]}
-\NormalTok{    pardict }\OperatorTok{=}\NormalTok{ \{}\StringTok{'v1_val'}\NormalTok{:.}\DecValTok{7}\NormalTok{,}
-               \StringTok{'v2_val'}\NormalTok{:.}\DecValTok{35}\NormalTok{,}
-               \StringTok{'v4_val'}\NormalTok{:.}\DecValTok{35}\NormalTok{,}
-               \StringTok{'v6_val'}\NormalTok{:.}\DecValTok{35}\NormalTok{,}
-               \StringTok{'v8_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
-               \StringTok{'k1_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
-               \StringTok{'k2_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
-               \StringTok{'k3_val'}\NormalTok{:.}\DecValTok{7}\NormalTok{,}
-               \StringTok{'k4_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
-               \StringTok{'k5_val'}\NormalTok{:.}\DecValTok{7}\NormalTok{,}
-               \StringTok{'k6_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
-               \StringTok{'k7_val'}\NormalTok{:.}\DecValTok{35}\NormalTok{,}
-               \StringTok{'k8_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
-               \StringTok{'n_val'}\NormalTok{:}\DecValTok{7}\NormalTok{,}
-               \StringTok{'eps_val'}\NormalTok{:}\DecValTok{0}\NormalTok{,}
-               \StringTok{'d_val'}\NormalTok{:}\DecValTok{1}\NormalTok{\}}
-               
-\NormalTok{    kwargs }\OperatorTok{=}\NormalTok{ \{}\StringTok{'recompute_LC'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'recompute_monodromy'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'recompute_g_sym'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'recompute_g'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'recompute_het_sym'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'recompute_z'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'recompute_i'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'recompute_k_sym'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'recompute_p_sym'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'recompute_p'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'recompute_h_sym'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'recompute_h'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'g_forward'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
-              \StringTok{'dir'}\NormalTok{:}\StringTok{'home+cgl_dat/'}\NormalTok{,}
-              \StringTok{'trunc_order'}\NormalTok{:}\DecValTok{9}\NormalTok{,}
-              \StringTok{'NA'}\NormalTok{:}\DecValTok{501}\NormalTok{,}
-              \StringTok{'NB'}\NormalTok{:}\DecValTok{501}\NormalTok{,}
-              \StringTok{'p_iter'}\NormalTok{:}\DecValTok{10}\NormalTok{,}
-              \StringTok{'TN'}\NormalTok{:}\DecValTok{20000}\NormalTok{,}
+\NormalTok{    pardict }\OperatorTok{=}\NormalTok{ \{}\StringTok{'v1_val'}\NormalTok{:.}\DecValTok{84}\NormalTok{,}\StringTok{'v2_val'}\NormalTok{:.}\DecValTok{42}\NormalTok{,}\StringTok{'v4_val'}\NormalTok{:.}\DecValTok{35}\NormalTok{,}\StringTok{'v6_val'}\NormalTok{:.}\DecValTok{35}\NormalTok{,}\StringTok{'v8_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
+               \StringTok{'k1_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}\StringTok{'k2_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}\StringTok{'k3_val'}\NormalTok{:.}\DecValTok{7}\NormalTok{,}\StringTok{'k4_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}\StringTok{'k5_val'}\NormalTok{:.}\DecValTok{7}\NormalTok{,}
+               \StringTok{'k6_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}\StringTok{'k7_val'}\NormalTok{:.}\DecValTok{35}\NormalTok{,}\StringTok{'k8_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}\StringTok{'K_val'}\NormalTok{:}\FloatTok{0.5}\NormalTok{,}\StringTok{'kc_val'}\NormalTok{:}\DecValTok{1}\NormalTok{,}
+               \StringTok{'n_val'}\NormalTok{:}\DecValTok{6}\NormalTok{,}\StringTok{'L_val'}\NormalTok{:}\DecValTok{0}\NormalTok{,}\StringTok{'eps_val'}\NormalTok{:}\DecValTok{0}\NormalTok{\}}
+    
+\NormalTok{    kwargs }\OperatorTok{=}\NormalTok{ \{}\StringTok{'g_forward'}\NormalTok{:}\VariableTok{True}\NormalTok{,}\StringTok{'z_forward'}\NormalTok{:}\VariableTok{False}\NormalTok{,}\StringTok{'i_forward'}\NormalTok{:}\VariableTok{False}\NormalTok{,}
+              \StringTok{'i_bad_dx'}\NormalTok{:[}\VariableTok{False}\NormalTok{,}\VariableTok{True}\NormalTok{,}\VariableTok{False}\NormalTok{,}\VariableTok{False}\NormalTok{,}\VariableTok{False}\NormalTok{,}\VariableTok{False}\NormalTok{],}
+              \StringTok{'dense'}\NormalTok{:}\VariableTok{True}\NormalTok{,}
+              \StringTok{'dir'}\NormalTok{:}\StringTok{'home+goodwin_dat/'}\NormalTok{,}
+              \StringTok{'trunc_order'}\NormalTok{:}\DecValTok{5}\NormalTok{,}
+              \StringTok{'trunc_deriv'}\NormalTok{:}\DecValTok{5}\NormalTok{,}
+              \StringTok{'NA'}\NormalTok{:}\DecValTok{2000}\NormalTok{,}
+              \StringTok{'p_iter'}\NormalTok{:}\DecValTok{20}\NormalTok{,}
+              \StringTok{'max_iter'}\NormalTok{:}\DecValTok{200}\NormalTok{,}
+              \StringTok{'TN'}\NormalTok{:}\DecValTok{2000}\NormalTok{,}
               \StringTok{'rtol'}\NormalTok{:}\FloatTok{1e-13}\NormalTok{,}
               \StringTok{'atol'}\NormalTok{:}\FloatTok{1e-13}\NormalTok{,}
               \StringTok{'rel_tol'}\NormalTok{:}\FloatTok{1e-10}\NormalTok{,}
-              \StringTok{'method'}\NormalTok{:}\StringTok{'LSODA'}\NormalTok{,}
-              \StringTok{'load_all'}\NormalTok{:}\VariableTok{True}\NormalTok{\}}
+              \StringTok{'method'}\NormalTok{:}\StringTok{'LSODA'}\NormalTok{\}}
               
-\NormalTok{    T_init }\OperatorTok{=} \DecValTok{2}\OperatorTok{*}\NormalTok{np.pi}
-\NormalTok{    LC_init }\OperatorTok{=}\NormalTok{ np.array([}\DecValTok{1}\NormalTok{,}\DecValTok{0}\NormalTok{,T_init])}
+\NormalTok{    T_init }\OperatorTok{=} \FloatTok{23.54}
+\NormalTok{    LC_init }\OperatorTok{=}\NormalTok{ np.array([.}\DecValTok{1734}\NormalTok{,.}\DecValTok{39}\NormalTok{,}\FloatTok{1.8814}\NormalTok{,.}\DecValTok{2708}\NormalTok{,T_init])}
     
     \CommentTok{# for NIC, 3rd derivatives go away, so we only need trunc_gh=3.}
 \NormalTok{    a }\OperatorTok{=}\NormalTok{ StrongCoupling(rhs,coupling,LC_init,var_names,pardict,}\OperatorTok{**}\NormalTok{kwargs)}
@@ -335,8 +314,14 @@ StrongCoupling call.
 Please see the StrongCoupling class below for more details on these
 keyword arguments. It is not necessary to define the kwargs dict as
 shown above. I prefer to keep the kwargs options explicit in a
-dictionary because the defaults often change (see StrongCoupling.py for
-the default kwargs).
+dictionary because I may change the defaults.
+
+The limit cycle initial condition must be estimated by hand. For
+example, I used XPP and simulated the limit cycle for a long time, then
+extracted x, y, z, v values at some large time value. The XPP file for
+this oscillator is contained in ode/goodwin.ode. The initial condition
+and period do not need to be precise because the code will search for
+the limit cycle via Newton's method, but closer is better.
 
 \hypertarget{StrongCoupling}{%
 \section{\texorpdfstring{Module
@@ -478,6 +463,9 @@ z_forward: list or bool.
     Same idea as g_forward for PRCS. Default: False.
 i_forward: list or bool.
     Same idea as g_forward for IRCS. Default: False.
+dense: bool.
+    If True, solve_ivp uses dense=True and evaluate solution
+    along tLC.
 dir: str.
     Location of data directory. Please choose carefully
     because some outputs may be on the order of gigabytes
@@ -496,6 +484,8 @@ NA: int.
 p_iter: int.
     Number of periods to integrate when computing the time 
     interal in p. Default: 10.
+max_iter: int.
+    Number of Newton iterations. Default: 20.
 TN: int.
     Total time steps when computing g, z, i.
 rtol, atol: float.
@@ -514,7 +504,7 @@ g_bad_dx: list or bool. If bool, use another variable to increase
     For example, we use g_small_dx = [False,True,False,...,False]
     for the thalamic model. The CGL model only needs
     g_small_idx = False
-z_bad_idx: same idea as g_small_idx for PRCs
+z_Gbad_idx: same idea as g_small_idx for PRCs
 i_bad_idx: same idea as g_small_idx for IRCs
 \end{verbatim}
 
@@ -536,74 +526,8 @@ def bispeu(
 \end{verbatim}
 \end{quote}
 
-silly workaround \url{https://stackoverflow.com/questions/47087109/...}
+silly workaround \url{https://stackoverflow.com/questions/47087109/}
 evaluate-the-output-from-scipy-2d-interpolation-along-a-curve
-
-\hypertarget{StrongCoupling.StrongCoupling.dg}{%
-\subparagraph{\texorpdfstring{Method
-\texttt{dg}}{Method dg}}\label{StrongCoupling.StrongCoupling.dg}}
-
-\begin{quote}
-\begin{verbatim}
-def dg(
-    self,
-    t,
-    z,
-    order,
-    het_vec
-)
-\end{verbatim}
-\end{quote}
-
-g functon rhs with ith het. term
-
-z: position t: time jacLC: jacobian on LC het: heterogeneous terms
-
-order determines the Taylor expansion term
-
-\hypertarget{StrongCoupling.StrongCoupling.di}{%
-\subparagraph{\texorpdfstring{Method
-\texttt{di}}{Method di}}\label{StrongCoupling.StrongCoupling.di}}
-
-\begin{quote}
-\begin{verbatim}
-def di(
-    self,
-    t,
-    z,
-    order,
-    het_vec
-)
-\end{verbatim}
-\end{quote}
-
-g functon rhs with ith het. term
-
-z: position t: time jacLC: jacobian on LC het: heterogeneous terms
-
-order determines the Taylor expansion term
-
-\hypertarget{StrongCoupling.StrongCoupling.dz}{%
-\subparagraph{\texorpdfstring{Method
-\texttt{dz}}{Method dz}}\label{StrongCoupling.StrongCoupling.dz}}
-
-\begin{quote}
-\begin{verbatim}
-def dz(
-    self,
-    t,
-    z,
-    order,
-    het_vec
-)
-\end{verbatim}
-\end{quote}
-
-g functon rhs with ith het. term
-
-z: position t: time jacLC: jacobian on LC het: heterogeneous terms
-
-order determines the Taylor expansion term
 
 \hypertarget{StrongCoupling.StrongCoupling.fLam2}{%
 \subparagraph{\texorpdfstring{Method
