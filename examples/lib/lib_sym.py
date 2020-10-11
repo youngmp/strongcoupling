@@ -4,7 +4,8 @@ Created on Sun Aug 16 10:43:11 2020
 
 library for creating symbolic functions
 """
-import lib
+
+from . import lib
 
 import os
 import math

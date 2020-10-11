@@ -20,11 +20,11 @@ Notes:
 import copy
 import lib.lib_sym as slib
 
-import lib.lib
+#import lib.lib as lib
+from lib import lib
 from lib.interp_basic import interp_basic as interpb
 from lib.interp2d_basic import interp2d_basic as interp2db
 #from lam_vec import lam_vec
-
 
 #import inspect
 import time
@@ -152,6 +152,9 @@ class StrongCoupling(object):
                 Same idea as g_forward for PRCS. Default: False.
             i_forward: list or bool.
                 Same idea as g_forward for IRCS. Default: False.
+            dense: bool.
+                If True, solve_ivp uses dense=True and evaluate solution
+                along tLC.
             dir: str.
                 Location of data directory. Please choose carefully
                 because some outputs may be on the order of gigabytes
@@ -170,6 +173,8 @@ class StrongCoupling(object):
             p_iter: int.
                 Number of periods to integrate when computing the time 
                 interal in p. Default: 10.
+            max_iter: int.
+                Number of Newton iterations. Default: 20.
             TN: int.
                 Total time steps when computing g, z, i.
             rtol, atol: float.
@@ -188,19 +193,21 @@ class StrongCoupling(object):
                 For example, we use g_small_dx = [False,True,False,...,False]
                 for the thalamic model. The CGL model only needs
                 g_small_idx = False
-            z_bad_idx: same idea as g_small_idx for PRCs
+            z_Gbad_idx: same idea as g_small_idx for PRCs
             i_bad_idx: same idea as g_small_idx for IRCs
         
         """
 
         defaults = {
             'trunc_order':3,
+            'trunc_deriv':3,
             
             'TN':20000,
             'dir':None,
             
             'NA':500,
             'p_iter':10,
+            'max_iter':100,
             
             'rtol':1e-7,
             'atol':1e-7,
@@ -213,6 +220,8 @@ class StrongCoupling(object):
             'g_bad_dx':False,
             'z_bad_dx':False,
             'i_bad_dx':False,
+            
+            'dense':False,
             
             'g_jac_eps':1e-3,
             'z_jac_eps':1e-3,
@@ -242,7 +251,6 @@ class StrongCoupling(object):
         self.coupling = coupling
         self.LC_init = LC_init
     
-        
         self.rule_par = {}
         
         # if no kwarg for default, use default. otherwise use input kwarg.
@@ -299,7 +307,7 @@ class StrongCoupling(object):
         self.psi, self.eps, self.kappa = sym.symbols('psi eps kappa')
         
         
-        # single-oscillator variables and coupling variables.
+        # single-oscillator variables and coupling variadef bles.
         # single oscillator vars use the names from var_names
         # A and B are appended to coupling variables
         # to denote oscillator 1 and 2.
@@ -425,6 +433,7 @@ class StrongCoupling(object):
             print('NOTE: coupling_pars set to default empty string.\
                   Please specify coupling_pars in kwargs if\
                   varying parameters.')
+        
         lib.generate_fnames(self,coupling_pars=self.coupling_pars)
         
         # make rhs callable
@@ -434,9 +443,6 @@ class StrongCoupling(object):
         
         #print('jac sym',self.jac_sym[0,0])
         self.load_limit_cycle()
-        
-        #print(self.LC_vec(10))
-        
         
         self.A_array,self.dxA = np.linspace(0,self.T,self.NA,
                                             retstep=True,
@@ -615,9 +621,7 @@ class StrongCoupling(object):
         self.LC_vec = lambdify(self.t,imp_lc,modules='numpy')
         #self.LC_vec = lam_vec(lam_list)
             
-        if False:
-            #print('lc init',self.LC['dat'][0,:])
-            #print('lc final',self.LC['dat'][-1,:])
+        if True:
             fig, axs = plt.subplots(nrows=self.dim,ncols=1)
             print('LC init',end=', ')
             
@@ -628,7 +632,8 @@ class StrongCoupling(object):
             axs[0].set_title('LC')
             
             plt.tight_layout()
-            plt.show(block=True)
+            plt.savefig('plot_LC.png')
+            #plt.show(block=True)
             
         
         # single rule
@@ -677,18 +682,6 @@ class StrongCoupling(object):
                         method=self.method,dense_output=True,
                         rtol=1e-14,atol=1e-14,args=(self.pardict_val,))
         
-        if False:
-            fig, axs = plt.subplots(nrows=self.dim,ncols=1)
-                
-            for i,ax in enumerate(axs):
-                key = self.var_names[i]
-                ax.plot(sol.t[:],sol.y.T[:,i],label=key)
-                ax.legend()
-                
-            axs[0].set_title('long-time solution')
-            plt.tight_layout()
-            plt.show(block=True)
-            time.sleep(.1)
             
         tn = len(sol.y.T)
         maxidx = np.argmax(sol.y.T[int(.2*tn):,0])+int(.2*tn)
@@ -852,19 +845,6 @@ class StrongCoupling(object):
         else:
             self.M = np.loadtxt(self.monodromy_fname)
         
-        if False:
-            fig, axs = plt.subplots(nrows=self.dim,ncols=1,figsize=(10,10))
-            sol = solve_ivp(self.mono1,[0,self.tLC[-1]],[0,0,0,1],
-                            args=(self.jacLC,),t_eval=self.tLC,
-                            method=self.method,dense_output=True,
-                            rtol=self.rtol,atol=self.atol)
-            
-            for i,ax in enumerate(axs):
-                ax.plot(self.tLC,sol.y.T[:,i])
-                
-            plt.tight_layout()
-            plt.show(block=True)
-        
         self.eigenvalues, self.eigenvectors = np.linalg.eig(self.M)
         
         # get smallest eigenvalue and associated eigenvector
@@ -910,21 +890,6 @@ class StrongCoupling(object):
         print('* Floquet Exponent kappa =',self.kappa_val)
         
         
-        if False:
-            fig, axs = plt.subplots(nrows=self.dim,ncols=self.dim,
-                                    figsize=(10,10))
-            
-            for i in range(self.dim):
-                for j in range(self.dim):
-                    
-                    axs[i,j].plot(self.tLC,self.sol[:,j+i*self.dim])
-                
-            axs[0,0].set_title('monodromy')
-            plt.tight_layout()
-            plt.show(block=True)
-            time.sleep(.1)
-        
-        
     def load_g_sym(self):
         # load het. functions h if they exist. otherwise generate.
         #self.rule_g0 = {sym.Indexed('gx',0):s(0),sym.Indexed('gy',0):s(0)}
@@ -950,7 +915,6 @@ class StrongCoupling(object):
         
         if self.recompute_g_sym or files_do_not_exist:
             print('* Computing g symbolic...')
-            #print(self.recompute_g_sym,files_do_not_exist)
             
             # create symbolic derivative
             sym_collected = slib.generate_g_sym(self)  
@@ -961,7 +925,6 @@ class StrongCoupling(object):
         
         
                     self.g['sym_'+key].append(expr)
-                    #print(self.g_sym_fnames[key][i])
                     dill.dump(self.g['sym_'+key][i],
                               open(self.g['sym_fnames_'+key][i],'wb'),
                               recurse=True)
@@ -988,21 +951,19 @@ class StrongCoupling(object):
         for i in range(self.miter):
             print(str(i))
             fname = self.g['dat_fnames'][i]
-            #print('i,fname',i,fname)
+            
             file_does_not_exist = not(os.path.isfile(fname))
             if self.recompute_g or file_does_not_exist:
                 
                 het_vec = self.interp_lam(i,self.g,fn_type='g')
                 
-                #print('het_vec',het_vec(1))
-                        
                 data = self.generate_g(i,het_vec)
                 np.savetxt(self.g['dat_fnames'][i],data)
                 
             else:
                 data = np.loadtxt(fname)
                 
-            if False:
+            if True:
                 fig, axs = plt.subplots(nrows=self.dim,ncols=1)
                 
                 for j,ax in enumerate(axs):
@@ -1014,14 +975,12 @@ class StrongCoupling(object):
                 print('g'+str(i)+' ini',data[0,:])
                 print('g'+str(i)+' fin',data[-1,:])
                 plt.tight_layout()
-                plt.show(block=True)
-                time.sleep(.1)
+                plt.savefig('plot_g'+str(i)+'.png')
                 
                 
             self.g['dat'].append(data)
             
             for j,key in enumerate(self.var_names):
-                #print(len(self.tLC),len(data[:,j]))
                 fn = interpb(self.tLC,data[:,j],self.T)
                 #fn = interp1d(self.tLC,data[:,j],self.T,kind='cubic')
                 imp = imp_fn('g'+key+'_'+str(i),self.fmod(fn))
@@ -1073,10 +1032,11 @@ class StrongCoupling(object):
         else:
             init = np.zeros(self.dim)
             eps = 1e-4
-            init = lib.run_newton2(self,self.dg,init,k,het_vec,
-                                  max_iter=20,eps=eps,
+            init = lib.run_newton2(self,self._dg,init,k,het_vec,
+                                  max_iter=self.max_iter,eps=eps,
                                   rel_tol=self.rel_tol,rel_err=10,
-                                  alpha=1,backwards=backwards)
+                                  alpha=1,backwards=backwards,
+                                  dense=self.dense)
         
         # get full solution
         if backwards:
@@ -1085,7 +1045,7 @@ class StrongCoupling(object):
         else:
             tLC = self.tLC
         
-        sol = solve_ivp(self.dg,[0,tLC[-1]],
+        sol = solve_ivp(self._dg,[0,tLC[-1]],
                         init,args=(k,het_vec),
                         t_eval=tLC,
                         method=self.method,
@@ -1225,9 +1185,9 @@ class StrongCoupling(object):
         print('* Computing z...')
         for i in range(self.miter):
             print(str(i))
+            
             fname = self.z['dat_fnames'][i]
             file_does_not_exist = not(os.path.isfile(fname))
-            #print('z fname',fname)
             if self.recompute_z or file_does_not_exist:
                 
                 het_vec = self.interp_lam(i,self.z,fn_type='z')
@@ -1238,7 +1198,7 @@ class StrongCoupling(object):
             else:
                 data = np.loadtxt(fname)
                 
-            if False:
+            if True:
                 fig, axs = plt.subplots(nrows=self.dim,ncols=1)
                 
                 for j,ax in enumerate(axs):
@@ -1250,8 +1210,8 @@ class StrongCoupling(object):
                 print('z'+str(i)+' fin',data[-1,:])
                 axs[0].set_title('z'+str(i))
                 plt.tight_layout()
-                plt.show(block=True)
-                time.sleep(.1)
+                plt.savefig('plot_z'+str(i)+'.png')
+                #time.sleep(.1)
                     
             self.z['dat'].append(data)
             
@@ -1276,20 +1236,18 @@ class StrongCoupling(object):
                 self.rule_z_AB.update(dictA)
                 self.rule_z_AB.update(dictB)
 
-
-        
         
     def generate_z(self,k,het_vec):
-        
-        if type(self.g_forward) is bool:
-            backwards = not(self.g_forward)
-        elif type(self.g_forward) is list:
-            backwards = not(self.g_forward[k])
+        if type(self.z_forward) is bool:
+            backwards = not(self.z_forward)
+        elif type(self.z_forward) is list:
+            backwards = not(self.z_forward[k])
         else:
-            raise ValueError('g_forward must be bool or list, not',
-                             type(self.g_forward))
+            raise ValueError('z_forward must be bool or list, not',
+                             type(self.z_forward))
             
-            
+        
+        
         if type(self.z_jac_eps) is float:
             eps = self.z_jac_eps
         elif type(self.z_jac_eps) is list:
@@ -1298,16 +1256,18 @@ class StrongCoupling(object):
             raise ValueError('z_jac_eps must be bool or list, not',
                              type(self.z_jac_eps))
         
+        
+        
         if k == 0:
             init = copy.deepcopy(self.z0_init)
             #init = [-1.389, -1.077, 9.645, 0]
         else:
             init = np.zeros(self.dim)
             
-            init = lib.run_newton2(self,self.dz,init,k,het_vec,
-                                  max_iter=20,eps=eps,alpha=1,
+            init = lib.run_newton2(self,self._dz,init,k,het_vec,
+                                  max_iter=self.max_iter,eps=eps,alpha=1,
                                   rel_tol=self.rel_tol,rel_err=10,
-                                  backwards=backwards)
+                                  backwards=backwards,dense=self.dense)
         
         if backwards:
             tLC = -self.tLC
@@ -1315,7 +1275,7 @@ class StrongCoupling(object):
         else:
             tLC = self.tLC
             
-        sol = solve_ivp(self.dz,[0,tLC[-1]],
+        sol = solve_ivp(self._dz,[0,tLC[-1]],
                         init,args=(k,het_vec),
                         method=self.method,dense_output=True,
                         t_eval=tLC,
@@ -1329,9 +1289,10 @@ class StrongCoupling(object):
         
         if k == 0:
             # normalize
-            dLC = self.rhs(0,self.LC_vec(0),self.pardict_val)
+            dLC = self.rhs(0,self.LC_vec(0)[0],self.pardict_val)
             zu = zu/(np.dot(dLC,zu[0,:]))
             
+        
         return zu
     
 
@@ -1355,14 +1316,13 @@ class StrongCoupling(object):
             if self.recompute_i or file_does_not_exist:
                 
                 het_vec = self.interp_lam(i,self.i,fn_type='i')
-                
                 data = self.generate_i(i,het_vec)
                 np.savetxt(self.i['dat_fnames'][i],data)
                 
             else:
                 data = np.loadtxt(fname)
                 
-            if False:
+            if True:
                 fig, axs = plt.subplots(nrows=self.dim,ncols=1)
                 
                 for j,ax in enumerate(axs):
@@ -1374,8 +1334,7 @@ class StrongCoupling(object):
                 print('i'+str(i)+' fin',data[-1,:])
                 axs[0].set_title('i'+str(i))
                 plt.tight_layout()
-                plt.show(block=True)
-                time.sleep(.1)
+                plt.savefig('plot_i'+str(i)+'.png')
                 
             self.i['dat'].append(data)
             
@@ -1438,21 +1397,26 @@ class StrongCoupling(object):
         if k == 0:
             init = copy.deepcopy(self.i0_init)
         else:
+            
+            if k == 1:
+                alpha = 1
+            else:
+                alpha = 1
             init = np.zeros(self.dim)
-            init = lib.run_newton2(self,self.di,init,k,het_vec,
-                                   max_iter=20,rel_tol=self.rel_tol,
-                                   eps=eps,alpha=1.,
-                                   backwards=backwards,exception=exception)
+            init = lib.run_newton2(self,self._di,init,k,het_vec,
+                                   max_iter=self.max_iter,rel_tol=self.rel_tol,
+                                   eps=eps,alpha=alpha,
+                                   backwards=backwards,
+                                   exception=exception,
+                                   dense=self.dense)
 
-            init = np.zeros(self.dim)
-        
         if backwards:
             tLC = -self.tLC
             
         else:
             tLC = self.tLC
         
-        sol = solve_ivp(self.di,[0,tLC[-1]],init,
+        sol = solve_ivp(self._di,[0,tLC[-1]],init,
                         args=(k,het_vec),
                         t_eval=tLC,
                         method=self.method,dense_output=True,
@@ -1464,12 +1428,20 @@ class StrongCoupling(object):
         else:
             iu = sol.y.T
         
+        print('i init',k,iu[0,:])
+        print('i final',k,iu[-1,:])
+        
         if k == 0:
             # normalize. classic weak coupling theory normalization
             c = np.dot(self.g1_init,iu[0,:])
             iu /= c
     
         if k == 1:  # normalize
+        
+            # kill off nonzero v
+            #if np.sum(self.g['dat'][1][:,-1]) < 1e-20:
+            #    iu[:,-1] = 0
+            
             # see Wilson 2020 PRE for normalization formula.
             LC0 = []
             g10 = []
@@ -1496,14 +1468,13 @@ class StrongCoupling(object):
             
             init = iu[0,:] + be*z0
             
-            sol = solve_ivp(self.di,[0,-self.tLC[-1]],init,
+            sol = solve_ivp(self._di,[0,tLC[-1]],init,
                             args=(k,het_vec),
-                            t_eval=-self.tLC,
+                            t_eval=tLC,
                             method=self.method,dense_output=True)
             
             iu = sol.y.T[::-1]
             
-        
         return iu
 
     def load_k_sym(self):
@@ -1554,11 +1525,28 @@ class StrongCoupling(object):
             dill.dump(self.cB['vec'],
                       open(self.cB['sym_fname'],'wb'),recurse=True)
             
+            
+            rule_trunc = {}
+            for k in range(self.miter,self.miter+500):
+                rule_trunc.update({self.eps**k:0})
+            
             for key in self.var_names:
-                collectedA = collect(expand(self.cA[key]),self.eps)
+                tmp = expand(self.cA[key],basic=False,deep=True,
+                             power_base=False,power_exp=False,
+                             mul=False,log=False,
+                             multinomial=True)
+                tmp = tmp.subs(rule_trunc)
+                
+                collectedA = collect(tmp,self.eps)
                 collectedA = collect(expand(collectedA),self.eps)
                 
-                collectedB = collect(expand(self.cB[key]),self.eps)
+                tmp = expand(self.cB[key],basic=False,deep=True,
+                             power_base=False,power_exp=False,
+                             mul=False,log=False,
+                             multinomial=True)
+                tmp = tmp.subs(rule_trunc)
+                
+                collectedB = collect(tmp,self.eps)
                 collectedB = collect(expand(collectedB),self.eps)
                 
                 self.cA[key+'_col'] = collectedA
@@ -1593,9 +1581,6 @@ class StrongCoupling(object):
             self.cA['vec'] = lib.load_dill([self.cA['sym_fname']])[0]
             self.cB['vec'] = lib.load_dill([self.cB['sym_fname']])[0]
             
-        #print(self.cA)
-        #print(self.cB)
-        
     def generate_k_sym(self):
         # generate terms involving the coupling term (see K in paper).
         
@@ -1606,8 +1591,6 @@ class StrongCoupling(object):
         coupA = self.coupling(self.A_pair,self.pardict_sym,option='sym')
         coupB = self.coupling(self.B_pair,self.pardict_sym,option='sym')
 
-        #print('coupA',coupA)
-        #print('coupB',coupB)
         # get expansion for coupling term
 
         # 0 and 1st derivative
@@ -1618,16 +1601,12 @@ class StrongCoupling(object):
             self.cB[key] = coupB[i]
             self.cB[key] += lib.df(coupB[i],self.B_pair,1).dot(self.dB_pair)
             
-        #print('after d',self.cA)
-        #print('after d',self.cB)
-        
         # 2nd + derivative
-        print('NOTE: truncated derivative')
-        for i in range(2,3):
+        
+        for i in range(2,self.trunc_deriv+1):
             # all x1,x2 are evaluated on limit cycle x=cos(t), y=sin(t)
             kA = lib.kProd(i,self.dA_pair)
             kB = lib.kProd(i,self.dB_pair)
-            #print(i)
             
             for j,key in enumerate(self.var_names):
                 dA = lib.vec(lib.df(coupA[j],self.A_pair,i))
@@ -1644,8 +1623,7 @@ class StrongCoupling(object):
         for key in self.var_names:
             self.cA[key] = self.cA[key].subs(rule)
             self.cB[key] = self.cB[key].subs(rule)
-            #print('self.cA[key]',self.cA[key])
-        #print('self.ca',self.cA)
+            
         return self.cA, self.cB
         
     
@@ -1664,7 +1642,18 @@ class StrongCoupling(object):
         if self.recompute_p_sym or not(lib.files_exist(self.pA['sym_fnames'])):
             print('* Computing p symbolic...')
             ircA = self.eps*self.i['vecA'].dot(self.cA['vec'])
-            ircA = collect(expand(ircA),self.eps)
+            
+            rule_trunc = {}
+            for k in range(self.miter,self.miter+500):
+                rule_trunc.update({self.eps**k:0})
+        
+            tmp = expand(ircA,basic=False,deep=True,
+                         power_base=False,power_exp=False,
+                         mul=False,log=False,
+                         multinomial=True)
+            tmp = tmp.subs(rule_trunc)
+            
+            ircA = collect(tmp,self.eps)
             ircA = collect(expand(ircA),self.eps)
             
             for i in range(self.miter):
@@ -1692,22 +1681,19 @@ class StrongCoupling(object):
         self.pA['lam'] = []
         
         
-        #print('starting new pool')
         self.pool = _ProcessPool(processes=self.processes)
         
         
         for i,fname in enumerate(self.pA['dat_fnames']):
-            #print('pA datfname',fname,os.path.isfile(fname))
+            
             if self.recompute_p or not(os.path.isfile(fname)):
                 print('* Computing p'+str(i)+'...')
                 start = time.time()
                 
                 old = 0
                 if old:
-                    #print('old')
                     pA_data = self.generate_p_old(i)
                 else:
-                    #print('new')
                     pA_data = self.generate_p(i)
                 end = time.time()
                 print('time elapsed for p'+str(i)+' = '+str(end-start))
@@ -1757,7 +1743,6 @@ class StrongCoupling(object):
         self.pool.close()
         self.pool.join()
         self.pool.terminate()
-        #print()
         
         
         ta = self.thA
@@ -2082,8 +2067,6 @@ class StrongCoupling(object):
         A_array2 = self.Aarr_noend
         B_array2 = self.Aarr_noend
         
-        #print(A_array2[0],A_array2[-1],B_array2[0],B_array2[-1],self.dxA)
-        #print(np.sum(lam_hetA(A_array2,B_array2)))
         
         for i in range(NA):
             ta2 = A_array2[i]*np.ones_like(B_array2)
@@ -2097,7 +2080,7 @@ class StrongCoupling(object):
             #lam_hetA_data[:,i] = lam_hetA(ta2,tb2)
             lam_hetA_data[:,i] = glam(*xs)
         
-        #print(lam_hetA_data)
+        
         A_mg, B_mg = np.meshgrid(A_array2,B_array2)
         
         
@@ -2116,7 +2099,6 @@ class StrongCoupling(object):
         a_mg_idxs = np.reshape(A_mg_idxs,(r*c,))
         b_mg_idxs = np.reshape(B_mg_idxs,(r*c,))
         
-        #print(len(a_mg_idxs),len(sig_bools))
         
         pA_data = np.zeros((r,c))
         pA_data = np.reshape(pA_data,(r*c,))
@@ -2130,7 +2112,7 @@ class StrongCoupling(object):
         s_idxs = np.arange(len(s),dtype=int)
         exponential = exp(s*kappa)
         
-        #print('s',s)
+        
         def return_integral(i):
             """
             return time integral at position a,b
@@ -2274,7 +2256,7 @@ class StrongCoupling(object):
     def load_h(self):
         
         self.hodd['dat'] = []
-        print(self.hodd['dat_fnames'])
+        
         for i in range(self.miter):
             fname = self.hodd['dat_fnames'][i]
             file_does_not_exist = not(os.path.isfile(fname))
@@ -2289,15 +2271,7 @@ class StrongCoupling(object):
                 print('* Loading H'+str(i)+'...')
                 data = np.loadtxt(self.hodd['dat_fnames'][i])
                 
-            if False:
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                ax.plot(data)
-                ax.set_title('hodd'+str(i)+' NA='+str(self.NA))
-                #ax.set_ylim(-1000,1000)
-                plt.tight_layout()
-                plt.show(block=True)
-                time.sleep(.1)
+            
                 
             self.hodd['dat'].append(data)
 
@@ -2351,7 +2325,7 @@ class StrongCoupling(object):
                 
             h[j] = np.sum(glam(*xs))*self.dxA/self.T
             
-        if False:
+        if True:
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.plot(h)
@@ -2359,16 +2333,25 @@ class StrongCoupling(object):
                      +', NA='+str(self.NA)
                      +', piter='+str(self.p_iter))
             ax.set_title(title)
-            ax.set_ylim(-.1,4.1)
-            plt.show(block=True)
+            plt.savefig('plot_h_non_odd'+str(k)+'.png')
         
         #print(h)
         #hodd = h
         hodd = (h[::-1]-h)
         
+        if True:
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(hodd)
+            title = ('h odd '+str(k)
+                     +', NA='+str(self.NA)
+                     +', piter='+str(self.p_iter))
+            ax.set_title(title)
+            plt.savefig('plot_hodd'+str(k)+'.png')
+        
         return hodd
             
-    def dg(self,t,z,order,het_vec):
+    def _dg(self,t,z,order,het_vec):
         """
         g functon rhs with ith het. term
         
@@ -2380,34 +2363,15 @@ class StrongCoupling(object):
         order determines the Taylor expansion term
         """
         
-        #z[0] *= 100
-        #z[2] /= 100
         
         jac = self.jacLC(t)*(order > 0)
-        
-        #LC_vec = self.LC_vec(t)
-        #jac = self.numerical_jac(self.thal_rhs,LC_vec)*(order > 0)
-        #jac = self.numerical_jac(rhs,LC_vec)*(order > 0)
-        
         hom = np.dot(jac-order*self.kappa_val*self.eye,z)
-        #het = np.array([het_lams['v'](t),het_lams['h'](t),
-        #                het_lams['r'](t),het_lams['w'](t)])
-        
-        #if int(t*self.TN/self.tLC[-1])%100 == 0:
-        #    print(hom,het_vec(t),t,order)
-        
-        #print('ghet vec',order,het_vec(t))
-        
         out = hom + het_vec(t)
-    
-        #out[0] /= 100
-        #out[2] *= 100
-    
     
     
         return out
     
-    def dz(self,t,z,order,het_vec):
+    def _dz(self,t,z,order,het_vec):
         """
         g functon rhs with ith het. term
         
@@ -2424,7 +2388,7 @@ class StrongCoupling(object):
         
         return out
     
-    def di(self,t,z,order,het_vec):
+    def _di(self,t,z,order,het_vec):
         """
         g functon rhs with ith het. term
         
@@ -2462,7 +2426,7 @@ class StrongCoupling(object):
         for key in self.var_names:
             tmp = {sym.Indexed(fn_type+key,i):fn_dict['imp_'+key][i](self.t)
                    for i in range(k)}
-            #print(k,key,len(self.z['imp_'+key]))
+            
             rule.update(tmp)
         
         rule = {**rule,**self.rule_LC,**self.rule_par}
@@ -2472,6 +2436,7 @@ class StrongCoupling(object):
         het_imp = sym.zeros(1,self.dim)
         for i,key in enumerate(self.var_names):
             sym_fn = fn_dict['sym_'+key][k].subs(rule)
+            
             lam = lambdify(self.t,sym_fn,modules='numpy')
             
             # evaluate
@@ -2483,6 +2448,14 @@ class StrongCoupling(object):
                 y = np.zeros(self.TN)
             else:
                 y = lam(self.tLC)
+                
+            if False:
+                
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.plot(lam(2*self.tLC))
+                ax.set_title('het_lam'+key)
+                plt.show(block=True)
             
             # save as implemented fn
             interp = interpb(self.LC['t'],y,self.T)
@@ -2495,7 +2468,7 @@ class StrongCoupling(object):
         if False and k > 0:
             fig, axs = plt.subplots(nrows=self.dim,ncols=1)
             for i,key in enumerate(self.var_names):
-                print('k',k,key)                
+                
                 axs[i].plot(self.tLC*2,het_vec[key](self.tLC*2))
             
             axs[0].set_title('lam dict')

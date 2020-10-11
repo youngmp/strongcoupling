@@ -178,8 +178,6 @@ def files_exist(*fnames,dictionary=False):
     else:
         return True
 
-    
-
 def load_dill(fnames):
     #print(fnames)
     templist = []
@@ -188,10 +186,10 @@ def load_dill(fnames):
         
     return templist
 
-
 def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
                 rel_tol=1e-12,rel_err=10,backwards=True,eps=1e-1,
-                exception=False,alpha=1,min_iter=5):
+                exception=False,alpha=1,min_iter=5,
+                dense=False):
     if backwards:
         tLC = -obj.tLC
     else:
@@ -215,10 +213,10 @@ def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
             
             dx,t,sol = get_newton_jac2(obj,fn,tLC,init,k,het_lams,
                                        return_sol=True,eps=eps,
-                                       exception=exception)
+                                       exception=exception,dense=dense)
             
             if np.linalg.norm(dx_prev) < np.linalg.norm(dx):
-                alpha /= 2
+                alpha /= 1.5
                 
             if np.linalg.norm(dx) < np.linalg.norm(dx_smallest):
                 dx_smallest = dx
@@ -229,7 +227,7 @@ def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
             
             #print(rel_err)
             
-            if False:
+            if True:
                 fig, axs = plt.subplots(nrows=obj.dim,ncols=1)
                     
                 for i,ax in enumerate(axs):
@@ -261,7 +259,7 @@ def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
 
 
 def get_newton_jac2(obj,fn,tLC,init,k=None,het_lams=None,return_sol=False,
-                    eps=1e-1,exception=False):
+                    eps=1e-1,exception=False,dense=False):
     """
     Newton derivative. for use in newton's method
 
@@ -288,11 +286,15 @@ def get_newton_jac2(obj,fn,tLC,init,k=None,het_lams=None,return_sol=False,
     
     J = np.zeros((n,n))
     #print('0')
-    sol = solve_ivp(fn,[0,tLC[-1]],init,args=args,
-                    method=obj.method,
-                    rtol=obj.rtol,atol=obj.atol)
-                    #dense_output=True, t_eval=tLC)
-                    #rtol=obj.rtol,atol=obj.atol)
+    if dense:
+        sol = solve_ivp(fn,[0,tLC[-1]],init,args=args,
+                        method=obj.method,
+                        rtol=obj.rtol,atol=obj.atol,
+                        dense_output=True,t_eval=tLC)
+    else:
+        sol = solve_ivp(fn,[0,tLC[-1]],init,args=args,
+                        method=obj.method,
+                        rtol=obj.rtol,atol=obj.atol)
             
     sol_unpert = sol.y.T
     t_unpert = sol.t
@@ -495,7 +497,7 @@ def generate_fnames(obj,model_pars='',coupling_pars=''):
     
     obj.pA['dat_fnames'] = [(obj.dir+'pA_dat_'+str(i)+model_pars
                             +c_pars
-                            +'_NB='+str(obj.NB)
+                            +'_NB='+str(obj.NA)
                             +'_piter='+str(obj.p_iter)
                             +'.txt')
                             for i in range(obj.miter)]
