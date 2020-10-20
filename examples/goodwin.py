@@ -139,9 +139,9 @@ def main():
         ax = fig.add_subplot(111)
         ax.plot(phi,a.hodd['dat'][k])
         
-        ax.set_title('hodd'+str(k)+' NA='+str(a.NA))
+        ax.set_title('Goodwin H Function Order '+str(k))
         ax.set_xlabel(r'$\phi$')
-        ax.set_ylabel(r'$\mathcal{H}^{('+str(k)+')}$')
+        ax.set_ylabel(r'$-2\mathcal{H}^{('+str(k)+r')}_\text{odd}$')
         #ax.set_ylim(-1000,1000)
         #plt.tight_layout()
         #plt.show(block=True)
