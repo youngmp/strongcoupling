@@ -110,6 +110,8 @@ def main():
     kwargs = {'g_forward':True,'z_forward':False,'i_forward':False,
               'i_bad_dx':[False,True,False,False,False,False],
               'dense':True,
+              'recompute_g':False,
+              'recompute_p':False,
               'dir':'home+goodwin_dat/',
               'trunc_order':5,
               'trunc_deriv':5,
@@ -120,7 +122,9 @@ def main():
               'rtol':1e-13,
               'atol':1e-13,
               'rel_tol':1e-10,
-              'method':'LSODA'}
+              'method':'LSODA',
+              'processes':4,
+              'chunksize':10000}
     
     
     T_init = 24.2
@@ -136,9 +140,12 @@ def main():
         ax.plot(phi,a.hodd['dat'][k])
         
         ax.set_title('hodd'+str(k)+' NA='+str(a.NA))
+        ax.set_xlabel(r'$\phi$')
+        ax.set_ylabel(r'$\mathcal{H}^{('+str(k)+')}$')
         #ax.set_ylim(-1000,1000)
         #plt.tight_layout()
-        plt.show(block=True)
+        #plt.show(block=True)
+        plt.savefig('goodwin_hodd'+str(k)+'.pdf')
         #time.sleep(.1)
 
 if __name__ == "__main__":
