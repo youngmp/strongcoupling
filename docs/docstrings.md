@@ -18,7 +18,7 @@ links-as-notes: true
 
 StrongCoupling.py computes the higher-order interaction functions from
 Park and Wilson 2020 for $N=2$ models and one Floquet multiplier.
-
+plt.
 In broad strokes, this library computes functions in the following order:
 
 * Use the equation for $\Delta x$ (15) to produce a hierarchy of
