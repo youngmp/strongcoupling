@@ -299,7 +299,7 @@ def cgl_2par(recompute_2par=False):
     q_val = pardict['q_val']
     #d_val = options['d_val']
     
-    fname = ('twopar_cgl'
+    fname = ('data/twopar_cgl'
              +'_order='+str(kwargs['trunc_order'])
              +'.txt')
     
@@ -793,14 +793,14 @@ def thalamic_1par():
     
     
     # thalamic 1 par
-    mid_x = np.loadtxt('mid_x.txt')
-    mid_y = np.loadtxt('mid_y.txt')
+    mid_x = np.loadtxt('data/mid_x.txt')
+    mid_y = np.loadtxt('data/mid_y.txt')
 
-    anti1_x = np.loadtxt('anti1_x.txt')
-    anti1_y = np.loadtxt('anti1_y.txt')
+    anti1_x = np.loadtxt('data/anti1_x.txt')
+    anti1_y = np.loadtxt('data/anti1_y.txt')
     
-    anti2_x = np.loadtxt('anti2_x.txt')
-    anti2_y = np.loadtxt('anti2_y.txt')
+    anti2_x = np.loadtxt('data/anti2_x.txt')
+    anti2_y = np.loadtxt('data/anti2_y.txt')
     
     #ax1.plot(mid_x,mid_y/(2*np.pi)*a.T)
     ax1.plot(mid_x,-mid_y/(2*np.pi)*a.T,color='k')
