@@ -16,3 +16,7 @@ $ pandoc --from=markdown+abbreviations+tex_math_single_backslash --toc --toc-dep
 -s flag enables standalone, so it generates the .tex file that can be compiled directly using PDFLaTeX.
 
 README.md contains custom information generated outside of docstrings (introduction, recommended versions).
+
+It may be convenient to combine the above commands with a double ampersand: 
+
+$ pdoc3 --pdf --template-dir ../docs/ StrongCoupling Thalamic CGL > ../docs/docstrings.md && pandoc --from=markdown+abbreviations+tex_math_single_backslash --toc --toc-depth=4 --output=../docs/docs.tex -t latex -s ../README.md ../docs/docstrings.md
