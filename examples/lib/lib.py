@@ -497,7 +497,7 @@ def generate_fnames(obj,model_pars='',coupling_pars=''):
     
     obj.pA['dat_fnames'] = [(obj.dir+'pA_dat_'+str(i)+model_pars
                             +c_pars
-                            +'_NB='+str(obj.NA)
+                            +'_NA='+str(obj.NA)
                             +'_piter='+str(obj.p_iter)
                             +'.txt')
                             for i in range(obj.miter)]
