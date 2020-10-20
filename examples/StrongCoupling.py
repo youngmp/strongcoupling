@@ -1,7 +1,7 @@
 """
 StrongCoupling.py computes the higher-order interaction functions from
 Park and Wilson 2020 for $N=2$ models and one Floquet multiplier.
-
+plt.
 In broad strokes, this library computes functions in the following order:
 
 * Use the equation for $\Delta x$ (15) to produce a hierarchy of
@@ -633,6 +633,7 @@ class StrongCoupling(object):
             
             plt.tight_layout()
             plt.savefig('plot_LC.png')
+            plt.close()
             #plt.show(block=True)
             
         
@@ -976,6 +977,7 @@ class StrongCoupling(object):
                 print('g'+str(i)+' fin',data[-1,:])
                 plt.tight_layout()
                 plt.savefig('plot_g'+str(i)+'.png')
+                plt.close()
                 
                 
             self.g['dat'].append(data)
@@ -1211,6 +1213,7 @@ class StrongCoupling(object):
                 axs[0].set_title('z'+str(i))
                 plt.tight_layout()
                 plt.savefig('plot_z'+str(i)+'.png')
+                plt.close()
                 #time.sleep(.1)
                     
             self.z['dat'].append(data)
@@ -1335,6 +1338,7 @@ class StrongCoupling(object):
                 axs[0].set_title('i'+str(i))
                 plt.tight_layout()
                 plt.savefig('plot_i'+str(i)+'.png')
+                plt.close()
                 
             self.i['dat'].append(data)
             
@@ -2325,7 +2329,7 @@ class StrongCoupling(object):
                 
             h[j] = np.sum(glam(*xs))*self.dxA/self.T
             
-        if True:
+        if False:
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.plot(h)
@@ -2334,6 +2338,7 @@ class StrongCoupling(object):
                      +', piter='+str(self.p_iter))
             ax.set_title(title)
             plt.savefig('plot_h_non_odd'+str(k)+'.png')
+            plt.close()
         
         #print(h)
         #hodd = h
@@ -2348,6 +2353,7 @@ class StrongCoupling(object):
                      +', piter='+str(self.p_iter))
             ax.set_title(title)
             plt.savefig('plot_hodd'+str(k)+'.png')
+            plt.close()
         
         return hodd
             

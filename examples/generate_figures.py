@@ -289,7 +289,7 @@ def cgl_2par(recompute_2par=False):
               'atol':1e-7,
               'rel_tol':1e-6,
               'method':'LSODA',
-              'load_all':False,
+              'load_all':True,
               'processes':4,
               'chunksize':10000}
     
@@ -477,19 +477,19 @@ def thalamic_diffs(ax,a,eps,recompute=False,Tf=0):
 
     if eps > 0.01 and eps < 0.05:
         T = a.T
-        LC = np.loadtxt('thal2_lc_eps=0.dat')
+        LC = np.loadtxt('data/thal2_lc_eps=0.dat')
         #T2 = LC[-1,0]#T
         
         T = 10.648268787326937
     elif eps == 0.1 or eps == 0.09:
-        LC = np.loadtxt('thal2_lc_eps=0.dat')
+        LC = np.loadtxt('data/thal2_lc_eps=0.dat')
         T = LC[-1,0]
         T2 = T
         print('WARNING: using eps=0 period for eps=0.1')
     elif eps == 0.25:
-        LC = np.loadtxt('thal2_lc_eps=0.dat')
+        LC = np.loadtxt('data/thal2_lc_eps=0.dat')
         
-        LC_small = np.loadtxt('thal2_lc_large_eps=.25.dat')
+        LC_small = np.loadtxt('data/thal2_lc_large_eps=.25.dat')
         #LC_large = np.loadtxt('thal2_lc_small_eps=.25.dat')
         
         #T = LC_small[-1,0]
@@ -648,7 +648,7 @@ def thalamic_h():
               'atol':1e-7,
               'rel_tol':1e-6,
               'method':'LSODA',
-              'load_all':False}
+              'load_all':True}
     
     """
     options = {'recompute_g_sym':False,
@@ -978,11 +978,11 @@ def main():
     
     # listed in order of Figures in paper
     figures = [
-        #(cgl_h,[],['cgl_h.pdf','cgl_h.png']),
-        #(cgl_2par,[],['cgl_2par.pdf','cgl_2par.png']),
+        (cgl_h,[],['cgl_h.pdf','cgl_h.png']),
+        (cgl_2par,[],['cgl_2par.pdf','cgl_2par.png']),
         
         (thalamic_h,[],['thal_h.pdf','thal_h.png']),
-        #(thalamic_1par,[],['thal_1par.pdf']),
+        (thalamic_1par,[],['thal_1par.pdf']),
     ]
     
     for fig in figures:
