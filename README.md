@@ -10,7 +10,7 @@ author:
 
 # Introduction
 
-StrongCoupling is a script for computing the higher-order coupling functions in my paper with Dan Wilson, ``High-Order Accuracy Compuation of Coupling Functions for Strongly Coupled Oscillators''
+StrongCoupling is a script for computing the higher-order coupling functions in my paper with Dan Wilson, ``High-Order Accuracy Compuation of Coupling Functions for Strongly Coupled Oscillators''. The script generates higher-order interaction functions to be used in phase models.
 
 ## Dependencies
 
@@ -40,9 +40,19 @@ The code is written so that tqdm is necessary, but tqdm only provides a status b
 
 As long as your computer has the packages listed above and they are installed using Python 3.7, the StrongCoupling script should run.
 
-I will not release the StrongCoupling script as an installable package simply because I do not have to time to maintain and track version releases for distribution platforms such as anaconda, pip, and apt. Worst case scenario, ``yarrr matey'' a Windows 10 virutal machine and install everything using anaconda.
+I have no immediate plans to release the StrongCoupling script as an installable package simply because I do not have to time to maintain and track version releases for distribution platforms such as anaconda, pip, and apt.
 
 Note that in Ubuntu a virtual environment should be used to run the StrongCoupling script. Ubuntu uses Python 3.6 by default and does not like it when the default is changed to Python 3.7.
+
+# Reproduce Figures
+
+To reproduce the figures in Park and Wilson 2020, run
+
+   $ generate_figures.py
+
+in the examples directory. This file will call the complex Ginzburg-Landau (CGL) model file (CGL.py) and the thalamic model file (Thalamic.py) and generate the figure files. It will take a while to run, and will use 4 cores by default! Make sure to edit the keyword arguments (documented in the StrongCoupling section below) if you wish to use more or less cores.
+
+
 
 # Set up a Model
 
@@ -60,45 +70,31 @@ and the coupling $F$ is defined as
 
 $$F = \frac{1}{N}\sum_{i=1}^N V_i.$$
 
+## Right-hand Side and Coupling Function
+
 To use StrongCoupling, define a right-hand side function with the name ``rhs'', and a coupling function named ``coupling''. rhs is defined for a single oscillator:
 
 ```python
 def rhs(t,z,pdict,option='value'):
 	x,y,z,v = z
-	
-	n = pdict['n']
-	
-	nu1 = pdict['nu1']
-	nu2 = pdict['nu2']
-	nu4 = pdict['nu4']
-	nu6 = pdict['nu6']
-	nu8 = pdict['nu8']
-	
-	k1n = pdict['k1']**n
-	k2 = pdict['k2']
-	k3 = pdict['k3']
-	k4 = pdict['k4']
-	k5 = pdict['k5']
-	k6 = pdict['k6']
-	k7 = pdict['k7']
-	k8 = pdict['k8']
-	
-	L = pdict['L']
-	
-	dx = nu1*k1n/(k1n+z**n) - nu2*x/(k2+x) + L
-	dy = k3*x - nu4*y/(k4+y)
-	dz = k5*y - nu6*z/(k6+z)
-	dv = k7*x - nu8*v/(k8+v)
-	
-	if option == 'value':
-		return np.array([dx,dy,dz,dv])
-	elif option == 'sym':
-		return Matrix([dx,dy,dz,dv])
+    
+    p = pdict
+    n = p['n']
+    
+    dx = p['v1']*p['k1']**n/(p['k1']**n+z**n) - p['v2']*x/(p['k2']+x) + p['L']
+    dy = p['k3']*x - p['v4']*y/(p['k4']+y)
+    dz = p['k5']*y - p['v6']*z/(p['k6']+z)
+    dv = p['k7']*x - p['v8']*v/(p['k8']+v)
+    
+    if option == 'value':
+        return np.array([dx,dy,dz,dv])
+    elif option == 'sym':
+        return Matrix([dx,dy,dz,dv])
 ```
 
 The input t is time and the input z is an array or list containing all the variables. pdict contains all the parameters in a dictionary. It is important to pdict treat as a dict because the rhs function plays two roles. One, the rhs function is put into scipy ODE solvers, in which case pdict contains key-value pairs of parameters and floats. Two, we sometimes take symbolic derivatives of the rhs function, in which case pdict contains key-value pairs of parameters and sympy objects. The option input is used by StrongCoupling to help the rhs function return the correct format for numeric or symbolic manipulation.
 
-The coupling fnction is defined for a single oscillator from the perspective of the first oscillator:
+The coupling function is also defined for a single oscillator from the perspective of the first oscillator:
 
 ```python
 def coupling(vars_pair,pdict,option='value'):
@@ -115,6 +111,8 @@ def coupling(vars_pair,pdict,option='value'):
 ```
 
 Note that the parameter vc is the coupling parameter in the paper, so we let it take the value of the parameter epsilon. Next, define a main() function where we define the variables, parameter dictionary, keyword options, limit cycle initial condition, and the StrongCoupling call.
+
+## Set Up Keyword Arguments
 
 ```python
 def main():
@@ -137,7 +135,9 @@ def main():
               'rtol':1e-13,
               'atol':1e-13,
               'rel_tol':1e-10,
-              'method':'LSODA'}
+              'method':'LSODA',
+              'processes':4,
+              'chunksize':10000}
 			  
 	T_init = 23.54
     LC_init = np.array([.1734,.39,1.8814,.2708,T_init])
@@ -145,13 +145,79 @@ def main():
     a = StrongCoupling(rhs,coupling,LC_init,var_names,pardict,**kwargs)
 ```
 
-Please see the StrongCoupling class below for more details on these keyword arguments. It is not necessary to define the kwargs dict as shown above -- keyword arguments may be entered in the standard keyword=value format straightt into the StrongCoupling class. I prefer to keep the kwargs options explicit in a dictionary because I may change the defaults.
+Please see the StrongCoupling class below for more details on these keyword arguments. It is not necessary to define the kwargs dict as shown above -- keyword arguments may be entered in the standard keyword=value format straight into the StrongCoupling class.
+
+Assuming that the appropriate libraries have been installed, you should be able to run this script now:
+
+    $ python3 goodwin.py
+
+When the program runs, it will attempt to find the limit cycle. The limit cycle initial condition must be estimated by hand. For example, I used XPP and simulated the limit cycle for a long time, then extracted x, y, z, v values at some large time value. The XPP file for this oscillator is contained in ode/goodwin.ode. The initial condition and period do not need to be precise because the code will search for the limit cycle via Newton's method, but closer is better.
+
+### Computing Floquet Eigenfunctions, PRCs, and IRCs
+
+It will then solve for the one Floquet multiplier (assuming there is only one slowest decaying mode) and turn to computing the hierarchy of ODEs $g^{(k)}$, $z^{(k)}$, and $i^{(k)}$ in that order. To solve for the hierarchy, the parameters
+
+    g_forward, z_forward, i_forward
+	
+tell the ODE solver to solve in forwards or backward time. With the options above, the integrator will solve for $g^{(k)}$ forwards in time for all $k$ and solve for $z^{(k)}$ and $i^{(k)}$ backwards in time for all $k$. These choices must be determined by hand, by checking whether or not the Newton's method converges. It is an involved process.
+
+The parameter
+
+    i_bad_dx
+
+makes Newton's method include an additional variable when convergence is weak. This parameter depends on the system. This is also an involved process and can only be decided after attempting to solve the ODEs. I will add more on this another time.
+
+The parameters 
+
+    rtol, atol, TN, method, dense, rel_tol
+	
+are additional numerical parameters, most of which go into solve_ivp. rtol and atol determine the absolute and relative tolerance. I like to keep these values small. TN is the total number of time steps to be used in the 1d interpolation calls. dense is the keyword argument that goes into solve_ivp and determines whether the solver will use a predefined time mesh or a time mesh determined by solve_ivp. rel_tol is the convergence threshold for Newton's method. 
+
+It will take some time for the script to solve the symbolic equations for $g^{(k)}$, $z^{(k)}$, and $i^{(k)}$ then it will take a longer time for the method to evaluate them numerically. rtol and atol determine the speed of the numerical integration, and they may be increased to speed up the integration depending on the system and the desired order of $\mathcal{H}$. Problems that do not need fine time steps to solve for $g^{(k)}$, $z^{(k)}$, and $i^{(k)}$ can afford to use larger rtol and atol.
+
+As the script generates $g^{(k)}$, $z^{(k)}$, and $i^{(k)}$ functions, it will save plots to the current working directory (plot\*.png). These plots are for debugging purposes, so that the user can check whether or not functions are converging and decide if the numerical choice above are appropriate. If you wish to save these plots, please rename or copy/paste them to another directory. The StrongCoupling will overwite the plots when any example is run. 
+
+The symbolic files and data files for $g^{(k)}$, $z^{(k)}$, and $i^{(k)}$ are saved to
+
+    home+goodwin_dat/
+	
+File names 	
+
+	*_data*_TN_*.txt 
+	
+Contain the trajectories for $g^{(k)}$, $z^{(k)}$, and $i^{(k)}$. Symbolic functions are saved to 
+
+    *.d
+	
+files.
+
+### Computing Generalized Interaction Functions
 
 The parameters
-    g_forward, z_forward, i_forward
-test
 
-The limit cycle initial condition must be estimated by hand. For example, I used XPP and simulated the limit cycle for a long time, then extracted x, y, z, v values at some large time value. The XPP file for this oscillator is contained in ode/goodwin.ode. The initial condition and period do not need to be precise because the code will search for the limit cycle via Newton's method, but closer is better.
+    processes, chunksize
 
+set the number of processors to use for multiprocessing and the number of 'jobs' to give to each processor when computing $p^{(k)}$. There is no hard and fast rule for these values. Please see the other example files to get an idea for how chunksize can be set.
 
+The script will then generate the symbolic coupling functions and evaluate them to generate the $p^{(k)}$ functions using the 4 cores specified earlier, then generate the $\mathcal{H}^{(k)}$ functions up to 5th order. The data for the $\mathcal{H}^{(k)}$ functions will be saved to 
 
+    home+goodwin_dat/
+
+i.e., the goodwin_dat folder in the home directory, with the file names
+
+    h_dat_*_NA=2000_piter=20.txt
+
+## Plotting Data
+
+It is up to you to decide how to use these files. To plot the files, feel free to append the following lines to the main() function:
+
+```python
+	# plot H functions
+    phi = np.linspace(0,a.T,a.NA)
+    for k in range(a.trunc_order+1):
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.plot(phi,a.hodd['dat'][k])
+        ax.set_title('hodd'+str(k)+' NA='+str(a.NA))
+        plt.show(block=True)
+```
