@@ -1,6 +1,6 @@
 ---
 title:
-- Generating Higher-Order Coupling Functions: A Python Library
+- Generating Higher-Order Coupling Functions&#58; A Python Library
 ...
 
 ---
@@ -10,7 +10,7 @@ author:
 
 # Introduction
 
-StrongCoupling is a script for computing the higher-order coupling functions in my paper with Dan Wilson, ``High-Order Accuracy Compuation of Coupling Functions for Strongly Coupled Oscillators''. The script generates higher-order interaction functions to be used in phase models.
+StrongCoupling is a script for computing the higher-order coupling functions in my paper with Dan Wilson, ``High-Order Accuracy Compuation of Coupling Functions for Strongly Coupled Oscillators''. The script generates higher-order interaction functions for phase reductions of systems containing limit cycle oscillations.
 
 ## Dependencies
 
@@ -32,29 +32,28 @@ Notes on depedendencies:
 
 ### Other Notes
 
-I intentially chose **pathos** over multiprocessing because pickling is more robust with pathos. Pathos uses dill, which can serialize far more objects compared to multiprocessing, which uses pickle.
+I chose **pathos** over multiprocessing because pickling is more robust with pathos. Pathos uses dill, which can serialize far more objects compared to multiprocessing, which uses pickle.
 
 The code is written so that tqdm is necessary, but tqdm only provides a status bar during parallel computing. It is not part of the engine, and the code can be modified to work without it. In future versions I may leave tqdm as a toggle.
 
 ## Installation
 
-As long as your computer has the packages listed above and they are installed using Python 3.7, the StrongCoupling script should run.
+As long as your computer has the packages listed above and they are installed using Python 3.7, the StrongCoupling script should run. Just place it within the same working directory as your Python script and import it as a module.
 
-I have no immediate plans to release the StrongCoupling script as an installable package simply because I do not have to time to maintain and track version releases for distribution platforms such as anaconda, pip, and apt.
+I have no immediate plans to release the StrongCoupling script as an installable package simply because I do not have the time to maintain and track version releases for distribution platforms such as anaconda, pip, and apt.
 
 Note that in Ubuntu a virtual environment should be used to run the StrongCoupling script. Ubuntu uses Python 3.6 by default and does not like it when the default is changed to Python 3.7.
 
 # Reproduce Figures
 
-To reproduce the figures in Park and Wilson 2020, run
+To reproduce the figures in Park and Wilson 2020, cd to the examples directory and run
 
    $ generate_figures.py
 
-in the examples directory. This file will call the complex Ginzburg-Landau (CGL) model file (CGL.py) and the thalamic model file (Thalamic.py) and generate the figure files. It will take a while to run, and will use 4 cores by default! Make sure to edit the keyword arguments (documented in the StrongCoupling section below) if you wish to use more or less cores.
+This file will call the complex Ginzburg-Landau (CGL) model file (CGL.py) and the thalamic model file (Thalamic.py) and generate the figures from the paper. It will take a while to run, and will use 4 cores by default! Make sure to edit the keyword arguments (documented in the StrongCoupling section below) if you wish to use more or less cores.
 
 
-
-# Set up a Model
+# Set up a Model: Goodwin Oscillator
 
 Let's walk through setting up a script using the Goodwin oscillator ([Gonze et al 2005](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1366510/)):
 
@@ -221,3 +220,10 @@ It is up to you to decide how to use these files. To plot the files, feel free t
         ax.set_title('hodd'+str(k)+' NA='+str(a.NA))
         plt.show(block=True)
 ```
+
+
+# Set up a Model: Chemical Star Network (UNDER CONSTRUCTION)
+
+Let's try setting up the model from [Norton et al 2019](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.123.148301). We will focus on the case of two oscillators for now.
+
+

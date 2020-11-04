@@ -108,7 +108,7 @@
 \makeatother
 
 
-\title{true}
+\title{Generating Higher-Order Coupling Functions: A Python Library}
 \author{Youngmin Park}
 \date{}
 
@@ -125,7 +125,8 @@
 StrongCoupling is a script for computing the higher-order coupling
 functions in my paper with Dan Wilson, ``High-Order Accuracy Compuation
 of Coupling Functions for Strongly Coupled Oscillators''. The script
-generates higher-order interaction functions to be used in phase models.
+generates higher-order interaction functions for phase reductions of
+systems containing limit cycle oscillations.
 
 \subsection{Dependencies}\label{dependencies}
 
@@ -155,10 +156,9 @@ with earlier versions of all other libraries.
 
 \subsubsection{Other Notes}\label{other-notes}
 
-I intentially chose \textbf{pathos} over multiprocessing because
-pickling is more robust with pathos. Pathos uses dill, which can
-serialize far more objects compared to multiprocessing, which uses
-pickle.
+I chose \textbf{pathos} over multiprocessing because pickling is more
+robust with pathos. Pathos uses dill, which can serialize far more
+objects compared to multiprocessing, which uses pickle.
 
 The code is written so that tqdm is necessary, but tqdm only provides a
 status bar during parallel computing. It is not part of the engine, and
@@ -168,12 +168,14 @@ leave tqdm as a toggle.
 \subsection{Installation}\label{installation}
 
 As long as your computer has the packages listed above and they are
-installed using Python 3.7, the StrongCoupling script should run.
+installed using Python 3.7, the StrongCoupling script should run. Just
+place it within the same working directory as your Python script and
+import it as a module.
 
 I have no immediate plans to release the StrongCoupling script as an
-installable package simply because I do not have to time to maintain and
-track version releases for distribution platforms such as anaconda, pip,
-and apt.
+installable package simply because I do not have the time to maintain
+and track version releases for distribution platforms such as anaconda,
+pip, and apt.
 
 Note that in Ubuntu a virtual environment should be used to run the
 StrongCoupling script. Ubuntu uses Python 3.6 by default and does not
@@ -181,18 +183,19 @@ like it when the default is changed to Python 3.7.
 
 \section{Reproduce Figures}\label{reproduce-figures}
 
-To reproduce the figures in Park and Wilson 2020, run
+To reproduce the figures in Park and Wilson 2020, cd to the examples
+directory and run
 
 \$ generate\_figures.py
 
-in the examples directory. This file will call the complex
-Ginzburg-Landau (CGL) model file (CGL.py) and the thalamic model file
-(Thalamic.py) and generate the figure files. It will take a while to
-run, and will use 4 cores by default! Make sure to edit the keyword
-arguments (documented in the StrongCoupling section below) if you wish
-to use more or less cores.
+This file will call the complex Ginzburg-Landau (CGL) model file
+(CGL.py) and the thalamic model file (Thalamic.py) and generate the
+figures from the paper. It will take a while to run, and will use 4
+cores by default! Make sure to edit the keyword arguments (documented in
+the StrongCoupling section below) if you wish to use more or less cores.
 
-\section{Set up a Model}\label{set-up-a-model}
+\section{Set up a Model: Goodwin
+Oscillator}\label{set-up-a-model-goodwin-oscillator}
 
 Let's walk through setting up a script using the Goodwin oscillator
 (\href{https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1366510/}{Gonze et
@@ -456,6 +459,13 @@ feel free to append the following lines to the main() function:
 \NormalTok{        plt.show(block}\OperatorTok{=}\VariableTok{True}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
+
+\section{Set up a Model: Chemical Star Network (UNDER
+CONSTRUCTION)}\label{set-up-a-model-chemical-star-network-under-construction}
+
+Let's try setting up the model from Norton et al 2019
+(https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.123.148301).
+We will focus on the case of two oscillators for now.
 
 \section{\texorpdfstring{Module
 \texttt{StrongCoupling}}{Module StrongCoupling}}\label{StrongCoupling}
