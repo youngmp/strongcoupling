@@ -1,6 +1,6 @@
 ---
 title:
-- High-Order Accuracy Coumputation of Coupling Functions for Strongly Coupled Oscllators (Documentation)
+- Generating Higher-Order Coupling Functions: A Python Library
 ...
 
 ---
