@@ -119,7 +119,7 @@ def main():
               'z_forward':False,
               'dense':True,
               'dir':'home+cgl_dat/',
-              'trunc_order':3,
+              'trunc_order':9,
               'NA':501,
               'NB':501,
               'p_iter':25,
