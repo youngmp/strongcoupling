@@ -216,7 +216,7 @@ def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
                                        exception=exception,dense=dense)
             
             if np.linalg.norm(dx_prev) < np.linalg.norm(dx):
-                alpha /= 1.5
+                alpha /= 1.02
                 
             if np.linalg.norm(dx) < np.linalg.norm(dx_smallest):
                 dx_smallest = dx
@@ -227,7 +227,7 @@ def run_newton2(obj,fn,init,k,het_lams,max_iter=10,
             
             #print(rel_err)
             
-            if True:
+            if False:
                 fig, axs = plt.subplots(nrows=obj.dim,ncols=1)
                     
                 for i,ax in enumerate(axs):

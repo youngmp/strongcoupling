@@ -236,6 +236,7 @@ class StrongCoupling(object):
             'i_bad_dx':False,
             
             'dense':False,
+            'escale':1,
             
             'g_jac_eps':1e-3,
             'z_jac_eps':1e-3,
@@ -900,15 +901,16 @@ class StrongCoupling(object):
         # print floquet multipliers
         
         
-        einv = np.linalg.inv(self.eigenvectors)
+        einv = np.linalg.inv(self.eigenvectors*self.escale)
         #print('eig inverse',einv)
+
         
         idx = np.argsort(np.abs(self.eigenvalues-1))[0]
         #min_lam_idx2 = np.argsort(einv)[-2]
         
         
             
-        self.g1_init = self.eigenvectors[:,self.min_lam_idx]
+        self.g1_init = self.eigenvectors[:,self.min_lam_idx]*self.escale
         self.z0_init = einv[idx,:]
         self.i0_init = einv[self.min_lam_idx,:]
         
