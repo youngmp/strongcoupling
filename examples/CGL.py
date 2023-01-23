@@ -16,13 +16,13 @@ from StrongCoupling import StrongCoupling
 import numpy as np
 from sympy import Matrix
 
-def rhs(t,z,pdict,option='value'):
+def rhs(t, z, pdict, option='value'):
     """
     Right-hand side of the Complex Ginzburgh-Landau (CGL) model from
     Wilson and Ermentrout RSTA 2019 
-    
+
     Parameters
-        
+
         t : float or sympy object.
             time
         z : array or list of floats or sympy objects.
@@ -35,18 +35,18 @@ def rhs(t,z,pdict,option='value'):
             Set to 'val' when inputs, t, z, pdict are floats. Set to
             'sym' when inputs t, z, pdict are sympy objects. The default
             is 'val'.
-        
+
     Returns
-        
+
         numpy array or sympy Matrix
             returns numpy array if option == 'val'
             returns sympy Matrix if option == 'sym'
-            
+
     """
-    
+
     x,y = z
     R2 = x**2 + y**2
-    
+
     if option == 'value':
         return np.array([x*(1-R2)-pdict['q']*R2*y,
                          y*(1-R2)+pdict['q']*R2*x])
@@ -54,18 +54,18 @@ def rhs(t,z,pdict,option='value'):
         return Matrix([x*(1-R2)-pdict['q']*R2*y,
                        y*(1-R2)+pdict['q']*R2*x])
 
-def coupling(vars_pair,pdict,option='value'):
+def coupling(vars_pair, pdict, option='value'):
     """
-    
+
     Diffusive coupling function between Complex Ginzburgh Landau
     (CGL) oscillators.
-    
+
     E.g.,this Python function is the function $G(x_i,x_j)$
     in the equation
     $\\frac{dx_i}{dt} = F(x_i) + \\varepsilon G(x_i,x_j)$
-    
+
     Parameters
-    
+
         vars_pair : list or array
             contains state variables from oscillator A and B, e.g.,
             x1,y1,x2,y2
@@ -77,16 +77,16 @@ def coupling(vars_pair,pdict,option='value'):
             Set to 'val' when inputs, t, z, pdict are floats. Set to
             'sym' when inputs t, z, pdict are sympy objects. The default
             is 'val'.
-    
+
     Returns
-        
+
         * numpy array or sympy Matrix
             * returns numpy array if option == 'val'. 
             returns sympy Matrix if option == 'sym'
-    
+
     """
     x1,y1,x2,y2 = vars_pair
-    
+
     if option == 'value':
         return np.array([x2-x1-pdict['d']*(y2-y1),
                          y2-y1+pdict['d']*(x2-x1)])
@@ -96,13 +96,13 @@ def coupling(vars_pair,pdict,option='value'):
 
 
 def main():
-    
+
     var_names = ['x','y']
-    
+
     pardict = {'q_val':1,
                'eps_val':0,
                'd_val':1}
-    
+
     kwargs = {'recompute_LC':False,
               'recompute_monodromy':False,
               'recompute_g_sym':False,
@@ -116,6 +116,7 @@ def main():
               'recompute_h_sym':False,
               'recompute_h':False,
               'g_forward':False,
+              'dense':True,
               'dir':'home+cgl_dat/',
               'trunc_order':9,
               'NA':501,
@@ -127,15 +128,15 @@ def main():
               'rel_tol':1e-10,
               'method':'LSODA',
               'load_all':True}
-    
+
     T_init = 2*np.pi
     LC_init = np.array([1,0,T_init])
-    
+
     # for NIC, 3rd derivatives go away, so we only need trunc_gh=3.
     a = StrongCoupling(rhs,coupling,LC_init,var_names,pardict,**kwargs)
-    
-    
-    
+
+
+
 if __name__ == "__main__":
     __spec__ = None
     main()

@@ -93,6 +93,18 @@ class StrongCoupling(object):
                 XPP is useful, otherwise integrate your RHS for various
                 initial conditions for long times and extract an initial
                 condition close to the limit cycle.
+            LC_long_sim_time: float or int.
+                Simulation time to compute the trjactory of an initial 
+                condition near the limit cycle solution. Used to
+                estimate limit cycle initial condition for use 
+                in the Newton method. Default: 500
+            LC_eps_time: float.
+                Approximation of the time error estimate in Newton's
+                method, e.g., (difference between initial conditions)/
+                (LC_eps_time). Default: 1e-4
+            LC_tol: float:
+                Error tolerance to stop Newton's method when computing
+                the limit cycle. Default: 1e-13
             var_names: list.
                 list of variable names as strings
             pardict: dict.
@@ -203,6 +215,9 @@ class StrongCoupling(object):
             
             'TN':20000,
             'dir':None,
+            'LC_long_sim_time':500,
+            'LC_eps_time':1e-4,
+            'LC_tol':1e-13,
             
             'NA':500,
             'p_iter':10,
@@ -429,9 +444,9 @@ class StrongCoupling(object):
             os.makedirs(self.dir)
         
         if self.coupling_pars == '':
-            print('NOTE: coupling_pars set to default empty string.\
-                  Please specify coupling_pars in kwargs if\
-                  varying parameters.')
+            print('NOTE: coupling_pars set to default empty string.'\
+                  +'Please specify coupling_pars in kwargs if'\
+                  +'varying parameters.')
         
         lib.generate_fnames(self,coupling_pars=self.coupling_pars)
         
@@ -620,7 +635,7 @@ class StrongCoupling(object):
         self.LC_vec = lambdify(self.t,imp_lc,modules='numpy')
         #self.LC_vec = lam_vec(lam_list)
             
-        if True:
+        if False:
             fig, axs = plt.subplots(nrows=self.dim,ncols=1)
             print('LC init',end=', ')
             
@@ -654,45 +669,36 @@ class StrongCoupling(object):
         
     def generate_limit_cycle(self):
         
-        tol = 1e-13
+        tol = self.LC_tol
         
         #T_init = 5.7
         eps = np.zeros(self.dim) + 1e-2
-        epstime = 1e-4
+        epstime = self.LC_eps_time
         dy = np.zeros(self.dim+1)+10
-
-        #T_init = 10.6
 
         # rough init found using XPP
         init = self.LC_init
         T_init = init[-1]
-        #np.array([-.64,0.71,0.25,0,T_init])
-        #init = np.array([-.468,0.6,0.07,0,T_init])
-        
-        
-        #init = np.array([-.3,
-        #                 .7619,
-        #                 0.1463,
-        #                 0,
-        #                 T_init])
-        
         
         # run for a while to settle close to limit cycle
-        sol = solve_ivp(self.rhs,[0,500],init[:-1],
+        sol = solve_ivp(self.rhs,[0,self.LC_long_sim_time],init[:-1],
                         method=self.method,dense_output=True,
-                        rtol=1e-14,atol=1e-14,args=(self.pardict_val,))
+                        rtol=1e-13,atol=1e-13,args=(self.pardict_val,))
         
-            
+        if True:
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(sol.t,sol.y.T[:,0])
+            plt.savefig('plot_limit_cycle_long.png')
+        
         tn = len(sol.y.T)
+        
+        # find max index after ignoring first 20% of simulation time
+        # avoids transients.
         maxidx = np.argmax(sol.y.T[int(.2*tn):,0])+int(.2*tn)
 
         
         init = np.append(sol.y.T[maxidx,:],T_init)
-        
-        #init = np.array([-4.65e+01,8.77e-01,4.68e-04,T_init])
-        #init = np.array([1.,1.,1.,1.,T_init])
-        
-        
         
         counter = 0
         while np.linalg.norm(dy) > tol:
@@ -720,11 +726,15 @@ class StrongCoupling(object):
                 solp = solve_ivp(self.rhs,[0,t[-1]],initp,
                                  method=self.method,
                                  rtol=1e-13,atol=1e-13,
+                                 #dense_output=True,
+                                 #t_eval=t,
                                  args=(self.pardict_val,))
                 
                 solm = solve_ivp(self.rhs,[0,t[-1]],initm,
                                  method=self.method,
                                  rtol=1e-13,atol=1e-13,
+                                 #dense_output=True,
+                                 #t_eval=t,
                                  args=(self.pardict_val,))
             
             
@@ -746,11 +756,15 @@ class StrongCoupling(object):
             solp = solve_ivp(self.rhs,[0,tp[-1]],initp,
                              method=self.method,
                              rtol=1e-13,atol=1e-13,
+                             #dense_output=True,
+                             #t_eval=tp,
                              args=(self.pardict_val,))
             
             solm = solve_ivp(self.rhs,[0,tm[-1]],initm,
                              method=self.method,
                              rtol=1e-13,atol=1e-13,
+                             #dense_output=True,
+                             #t_eval=tm,
                              args=(self.pardict_val,))
             
             yp = solp.y.T
@@ -764,6 +778,8 @@ class StrongCoupling(object):
             sol = solve_ivp(self.rhs,[0,init[-1]],init[:-1],
                              method=self.method,
                              rtol=1e-13,atol=1e-13,
+                             #dense_output=True,
+                             #t_eval=t,
                              args=(self.pardict_val,))
             
             y_final = sol.y.T[-1,:]
@@ -841,11 +857,30 @@ class StrongCoupling(object):
             self.sol = sol.y.T
             self.M = np.reshape(self.sol[-1,:],(r,c))
             np.savetxt(self.monodromy_fname,self.M)
+            
+            if False:
+                fig, axs = plt.subplots(nrows=r,ncols=c)
+                
+                for i in range(axs[:,0]):
+                    for j in range(axs[0,:]):
+                        axs[i,j].plot(self.tLC,sol.y.T[i,j])
+                    
+                axs[0,1].set_title('monodromy')
+                #print('monodromy'+' ini',sol.y.T[0,:])
+                #print('g'+str(i)+' fin',data[-1,:])
+                plt.tight_layout()
+                plt.savefig('monodromy.png')
+                plt.close()
+            
+            
 
         else:
             self.M = np.loadtxt(self.monodromy_fname)
         
         self.eigenvalues, self.eigenvectors = np.linalg.eig(self.M)
+        
+        print(self.eigenvalues)
+        print(np.log(self.eigenvalues)/self.T)
         
         # get smallest eigenvalue and associated eigenvector
         self.min_lam_idx = np.argsort(self.eigenvalues)[-2]
@@ -865,7 +900,7 @@ class StrongCoupling(object):
         # print floquet multipliers
         
         
-        einv = np.linalg.inv(self.eigenvectors/2)
+        einv = np.linalg.inv(self.eigenvectors)
         #print('eig inverse',einv)
         
         idx = np.argsort(np.abs(self.eigenvalues-1))[0]
@@ -873,7 +908,7 @@ class StrongCoupling(object):
         
         
             
-        self.g1_init = self.eigenvectors[:,self.min_lam_idx]/2.
+        self.g1_init = self.eigenvectors[:,self.min_lam_idx]
         self.z0_init = einv[idx,:]
         self.i0_init = einv[self.min_lam_idx,:]
         
@@ -963,6 +998,7 @@ class StrongCoupling(object):
             else:
                 data = np.loadtxt(fname)
                 
+            print(len(data),len(self.tLC))
             if True:
                 fig, axs = plt.subplots(nrows=self.dim,ncols=1)
                 
@@ -1020,6 +1056,15 @@ class StrongCoupling(object):
         else:
             raise ValueError('g_forward must be bool or list, not',
                              type(self.g_forward))
+            
+        
+        if type(self.g_jac_eps) is float:
+            eps = self.g_jac_eps
+        elif type(self.g_jac_eps) is list:
+            eps= self.g_jac_eps[k]
+        else:
+            raise ValueError('g_jac_eps must be float or list or floats, not',
+                             type(self.g_jac_eps))
         
         # load kth expansion of g for k >= 0
         if k == 0:
@@ -1046,6 +1091,7 @@ class StrongCoupling(object):
         else:
             tLC = self.tLC
         
+        print(len(tLC),len(self.tLC))
         sol = solve_ivp(self._dg,[0,tLC[-1]],
                         init,args=(k,het_vec),
                         t_eval=tLC,
@@ -1053,11 +1099,14 @@ class StrongCoupling(object):
                         dense_output=True,
                         rtol=self.rtol,atol=self.atol)
         
+        
+        print(len(tLC),len(self.tLC),tLC[-1],sol.t[-1])
         if backwards:
             gu = sol.y.T[::-1,:]
             
         else:
             gu = sol.y.T
+        print(len(sol.y.T),len(sol.t))
         return gu
 
 
@@ -2368,9 +2417,10 @@ class StrongCoupling(object):
         order determines the Taylor expansion term
         """
         
+        #print(t)
         
         jac = self.jacLC(t)*(order > 0)
-        hom = np.dot(jac-order*self.kappa_val*self.eye,z)
+        hom = np.dot(jac-order*self.kappa_val*self.eye,z.T)
         out = hom + het_vec(t)
     
     
@@ -2388,7 +2438,7 @@ class StrongCoupling(object):
         order determines the Taylor expansion term
         """
         
-        hom = np.dot(self.jacLC(t).T+order*self.kappa_val*self.eye,z)
+        hom = np.dot(self.jacLC(t).T+order*self.kappa_val*self.eye,z.T)
         out = -hom - het_vec(t)
         
         return out
@@ -2451,9 +2501,12 @@ class StrongCoupling(object):
                 y = np.zeros(self.TN)
             elif fn_type == 'i' and k == 0:
                 y = np.zeros(self.TN)
+            elif sym_fn == 0:
+                y= np.zeros(self.TN)
             else:
                 y = lam(self.tLC)
-                
+            
+            #print(y,k,self.tLC,sym_fn)
             if False:
                 
                 fig = plt.figure()

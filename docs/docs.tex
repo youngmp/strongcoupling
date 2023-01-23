@@ -1,3 +1,7 @@
+\PassOptionsToPackage{unicode=true}{hyperref} % options for packages loaded elsewhere
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames*,x11names*}{xcolor}
+%
 \documentclass[english,a4paper,oneside]{article}
 \usepackage{lmodern}
 \usepackage{amssymb,amsmath}
@@ -6,12 +10,9 @@
 \ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
   \usepackage[T1]{fontenc}
   \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provides euro and other symbols
 \else % if luatex or xelatex
-  \ifxetex
-    \usepackage{mathspec}
-  \else
-    \usepackage{fontspec}
-  \fi
+  \usepackage{unicode-math}
   \defaultfontfeatures{Ligatures=TeX,Scale=MatchLowercase}
 \fi
 % use upquote if available, for straight quotes in verbatim environments
@@ -21,24 +22,25 @@
 \usepackage[]{microtype}
 \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
 }{}
-\PassOptionsToPackage{hyphens}{url} % url is loaded by hyperref
-\usepackage[unicode=true]{hyperref}
-\PassOptionsToPackage{usenames,dvipsnames}{color} % color is loaded by hyperref
+\IfFileExists{parskip.sty}{%
+\usepackage{parskip}
+}{% else
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt plus 2pt minus 1pt}
+}
+\usepackage{xcolor}
+\usepackage{hyperref}
 \hypersetup{
-            pdfauthor={Youngmin Park},
+            pdftitle={Generating Higher-Order Coupling Functions for Strongly Coupled Oscillators: A Python Library},
+            pdfauthor={Youngmin Park and Dan Wilson},
             colorlinks=true,
             linkcolor=blue,
+            filecolor=Maroon,
             citecolor=Blue,
             urlcolor=Blue,
             breaklinks=true}
 \urlstyle{same}  % don't use monospace font for urls
 \usepackage[margin=1in]{geometry}
-\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
-  \usepackage[shorthands=off,main=english]{babel}
-\else
-  \usepackage{polyglossia}
-  \setmainlanguage[]{english}
-\fi
 \usepackage{color}
 \usepackage{fancyvrb}
 \newcommand{\VerbBar}{|}
@@ -46,48 +48,42 @@
 \DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
 % Add ',fontsize=\small' for more characters per line
 \newenvironment{Shaded}{}{}
-\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.49,0.56,0.16}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.53,0.00,0.00}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
 \newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.56,0.13,0.00}{#1}}
 \newcommand{\DecValTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
-\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
-\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
-\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.53,0.00,0.00}{#1}}
-\newcommand{\CharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
-\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
-\newcommand{\StringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
-\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
-\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.73,0.40,0.53}{#1}}
-\newcommand{\ImportTok}[1]{#1}
-\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textit{#1}}}
 \newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.73,0.13,0.13}{\textit{#1}}}
-\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
-\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
-\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{#1}}
-\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.02,0.16,0.49}{#1}}
-\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.10,0.09,0.49}{#1}}
-\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
-\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.40,0.40,0.40}{#1}}
-\newcommand{\BuiltInTok}[1]{#1}
-\newcommand{\ExtensionTok}[1]{#1}
-\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.74,0.48,0.00}{#1}}
-\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.49,0.56,0.16}{#1}}
-\newcommand{\RegionMarkerTok}[1]{#1}
-\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
-\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
-\newcommand{\AlertTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
 \newcommand{\ErrorTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.02,0.16,0.49}{#1}}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
 \newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.40,0.40,0.40}{#1}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.74,0.48,0.00}{#1}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.73,0.40,0.53}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.10,0.09,0.49}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
 \usepackage{longtable,booktabs}
 % Fix footnotes in tables (requires footnote package)
-\IfFileExists{footnote.sty}{\usepackage{footnote}\makesavenoteenv{long table}}{}
+\IfFileExists{footnote.sty}{\usepackage{footnote}\makesavenoteenv{longtable}}{}
 % Make links footnotes instead of hotlinks:
-\renewcommand{\href}[2]{#2\footnote{\url{#1}}}
-\IfFileExists{parskip.sty}{%
-\usepackage{parskip}
-}{% else
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{6pt plus 2pt minus 1pt}
-}
+\DeclareRobustCommand{\href}[2]{#2\footnote{\url{#1}}}
 \setlength{\emergencystretch}{3em}  % prevent overfull lines
 \providecommand{\tightlist}{%
   \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
@@ -107,20 +103,37 @@
 \def\fps@figure{htbp}
 \makeatother
 
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[shorthands=off,main=english]{babel}
+\else
+  % load polyglossia as late as possible as it *could* call bidi if RTL lang (e.g. Hebrew or Arabic)
+  \usepackage{polyglossia}
+  \setmainlanguage[]{english}
+\fi
 
-\title{Generating Higher-Order Coupling Functions: A Python Library}
-\author{Youngmin Park}
+\title{Generating Higher-Order Coupling Functions for Strongly Coupled
+Oscillators: A Python Library}
+\author{Youngmin Park and Dan Wilson}
 \date{}
 
 \begin{document}
 \maketitle
+\begin{abstract}
+We introduce several detailed examples of how to use the StrongCoupling
+library. The framework is reasonably general, with no a priori
+restrictions on model dimension or type of coupling function. We only
+require differentiability. Examples in this document include the Goodwin
+oscillator of circadian rhythms, and a small coupled system of two
+chemical oscillators.
+\end{abstract}
 
 {
-\hypersetup{linkcolor=black}
+\hypersetup{linkcolor=}
 \setcounter{tocdepth}{4}
 \tableofcontents
 }
-\section{Introduction}\label{introduction}
+\hypertarget{introduction}{%
+\section{Introduction}\label{introduction}}
 
 StrongCoupling is a script for computing the higher-order coupling
 functions in my paper with Dan Wilson, ``High-Order Accuracy Compuation
@@ -128,7 +141,8 @@ of Coupling Functions for Strongly Coupled Oscillators''. The script
 generates higher-order interaction functions for phase reductions of
 systems containing limit cycle oscillations.
 
-\subsection{Dependencies}\label{dependencies}
+\hypertarget{dependencies}{%
+\subsection{Dependencies}\label{dependencies}}
 
 All following libraries are required to make the script run.
 
@@ -154,7 +168,8 @@ function inputs. Python 3.6 or earlier versions have a limit of 256
 inputs and will not work with our scripts. The script will likely work
 with earlier versions of all other libraries.
 
-\subsubsection{Other Notes}\label{other-notes}
+\hypertarget{other-notes}{%
+\subsubsection{Other Notes}\label{other-notes}}
 
 I chose \textbf{pathos} over multiprocessing because pickling is more
 robust with pathos. Pathos uses dill, which can serialize far more
@@ -165,7 +180,8 @@ status bar during parallel computing. It is not part of the engine, and
 the code can be modified to work without it. In future versions I may
 leave tqdm as a toggle.
 
-\subsection{Installation}\label{installation}
+\hypertarget{installation}{%
+\subsection{Installation}\label{installation}}
 
 As long as your computer has the packages listed above and they are
 installed using Python 3.7, the StrongCoupling script should run. Just
@@ -181,7 +197,8 @@ Note that in Ubuntu a virtual environment should be used to run the
 StrongCoupling script. Ubuntu uses Python 3.6 by default and does not
 like it when the default is changed to Python 3.7.
 
-\section{Reproduce Figures}\label{reproduce-figures}
+\hypertarget{reproduce-figures}{%
+\section{Reproduce Figures}\label{reproduce-figures}}
 
 To reproduce the figures in Park and Wilson 2020, cd to the examples
 directory and run
@@ -194,8 +211,9 @@ figures from the paper. It will take a while to run, and will use 4
 cores by default! Make sure to edit the keyword arguments (documented in
 the StrongCoupling section below) if you wish to use more or less cores.
 
+\hypertarget{set-up-a-model-goodwin-oscillator}{%
 \section{Set up a Model: Goodwin
-Oscillator}\label{set-up-a-model-goodwin-oscillator}
+Oscillator}\label{set-up-a-model-goodwin-oscillator}}
 
 Let's walk through setting up a script using the Goodwin oscillator
 (\href{https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1366510/}{Gonze et
@@ -213,8 +231,9 @@ and the coupling \(F\) is defined as
 
 \[F = \frac{1}{N}\sum_{i=1}^N V_i.\]
 
+\hypertarget{right-hand-side-and-coupling-function}{%
 \subsection{Right-hand Side and Coupling
-Function}\label{right-hand-side-and-coupling-function}
+Function}\label{right-hand-side-and-coupling-function}}
 
 To use StrongCoupling, define a right-hand side function with the name
 \texttt{rhs\textquotesingle{}\textquotesingle{},\ and\ a\ coupling\ function\ named}coupling''.
@@ -274,7 +293,8 @@ let it take the value of the parameter epsilon. Next, define a main()
 function where we define the variables, parameter dictionary, keyword
 options, limit cycle initial condition, and the StrongCoupling call.
 
-\subsection{Set Up Keyword Arguments}\label{set-up-keyword-arguments}
+\hypertarget{set-up-keyword-arguments}{%
+\subsection{Set Up Keyword Arguments}\label{set-up-keyword-arguments}}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -329,8 +349,9 @@ oscillator is contained in ode/goodwin.ode. The initial condition and
 period do not need to be precise because the code will search for the
 limit cycle via Newton's method, but closer is better.
 
+\hypertarget{computing-floquet-eigenfunctions-prcs-and-ircs}{%
 \subsubsection{Computing Floquet Eigenfunctions, PRCs, and
-IRCs}\label{computing-floquet-eigenfunctions-prcs-and-ircs}
+IRCs}\label{computing-floquet-eigenfunctions-prcs-and-ircs}}
 
 It will then solve for the one Floquet multiplier (assuming there is
 only one slowest decaying mode) and turn to computing the hierarchy of
@@ -412,8 +433,9 @@ Symbolic functions are saved to
 
 files.
 
+\hypertarget{computing-generalized-interaction-functions}{%
 \subsubsection{Computing Generalized Interaction
-Functions}\label{computing-generalized-interaction-functions}
+Functions}\label{computing-generalized-interaction-functions}}
 
 The parameters
 
@@ -442,7 +464,8 @@ i.e., the goodwin\_dat folder in the home directory, with the file names
 h_dat_*_NA=2000_piter=20.txt
 \end{verbatim}
 
-\subsection{Plotting Data}\label{plotting-data}
+\hypertarget{plotting-data}{%
+\subsection{Plotting Data}\label{plotting-data}}
 
 It is up to you to decide how to use these files. To plot the files,
 feel free to append the following lines to the main() function:
@@ -460,15 +483,55 @@ feel free to append the following lines to the main() function:
 \end{Highlighting}
 \end{Shaded}
 
+\hypertarget{set-up-a-model-chemical-star-network-under-construction}{%
 \section{Set up a Model: Chemical Star Network (UNDER
-CONSTRUCTION)}\label{set-up-a-model-chemical-star-network-under-construction}
+CONSTRUCTION)}\label{set-up-a-model-chemical-star-network-under-construction}}
 
-Let's try setting up the model from Norton et al 2019
-(https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.123.148301).
-We will focus on the case of two oscillators for now.
+Let's try setting up the model from
+\href{https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.123.148301}{Norton
+et al 2019}. We will focus on the case of two oscillators for now. From
+the supplementary information, the equations are:
 
+\[\frac{x}{dt} = -k_1xy + k_2 y - 2k_3 x^2 + k_4\frac{x(c_0-z)}{(c_0-z+c_{min})},\]
+\[\frac{y}{dt} = -3k_1xy - 2k_2y - k_3x^2 + k_7 u + k_9 z + k_I \frac{(c_0-z)}{b_c/b+1},\]
+\[\frac{z}{dt} = 2k_4 \frac{x(c_0-z)}{c_0 -z+c_{min}} - k_9 z - k_{10} z + k_I \frac{c_0 - z}{b_c/b+1},\]
+\[\frac{u}{dt} = 2k_1 xy + k_2y + k_3 x^2 - k_7 u,\]
+
+and the coupling \(F\) is defined as
+
+\[F = \frac{1}{N}\sum_{i=1}^N V_i.\]
+
+\hypertarget{right-hand-side-and-coupling-function-1}{%
+\subsection{Right-hand Side and Coupling
+Function}\label{right-hand-side-and-coupling-function-1}}
+
+As above, we define a right-hand side function with the name
+\texttt{rhs\textquotesingle{}\textquotesingle{},\ and\ a\ coupling\ function\ named}coupling''.
+rhs is defined for a single oscillator:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def}\NormalTok{ rhs(t,z,pdict,option}\OperatorTok{=}\StringTok{'value'}\NormalTok{):}
+\NormalTok{    x,y,z,v }\OperatorTok{=}\NormalTok{ z}
+    
+\NormalTok{    p }\OperatorTok{=}\NormalTok{ pdict}
+\NormalTok{    n }\OperatorTok{=}\NormalTok{ p[}\StringTok{'n'}\NormalTok{]}
+    
+\NormalTok{    dx }\OperatorTok{=}\NormalTok{ p[}\StringTok{'v1'}\NormalTok{]}\OperatorTok{*}\NormalTok{p[}\StringTok{'k1'}\NormalTok{]}\OperatorTok{**}\NormalTok{n}\OperatorTok{/}\NormalTok{(p[}\StringTok{'k1'}\NormalTok{]}\OperatorTok{**}\NormalTok{n}\OperatorTok{+}\NormalTok{z}\OperatorTok{**}\NormalTok{n) }\OperatorTok{-}\NormalTok{ p[}\StringTok{'v2'}\NormalTok{]}\OperatorTok{*}\NormalTok{x}\OperatorTok{/}\NormalTok{(p[}\StringTok{'k2'}\NormalTok{]}\OperatorTok{+}\NormalTok{x) }\OperatorTok{+}\NormalTok{ p[}\StringTok{'L'}\NormalTok{]}
+\NormalTok{    dy }\OperatorTok{=}\NormalTok{ p[}\StringTok{'k3'}\NormalTok{]}\OperatorTok{*}\NormalTok{x }\OperatorTok{-}\NormalTok{ p[}\StringTok{'v4'}\NormalTok{]}\OperatorTok{*}\NormalTok{y}\OperatorTok{/}\NormalTok{(p[}\StringTok{'k4'}\NormalTok{]}\OperatorTok{+}\NormalTok{y)}
+\NormalTok{    dz }\OperatorTok{=}\NormalTok{ p[}\StringTok{'k5'}\NormalTok{]}\OperatorTok{*}\NormalTok{y }\OperatorTok{-}\NormalTok{ p[}\StringTok{'v6'}\NormalTok{]}\OperatorTok{*}\NormalTok{z}\OperatorTok{/}\NormalTok{(p[}\StringTok{'k6'}\NormalTok{]}\OperatorTok{+}\NormalTok{z)}
+\NormalTok{    dv }\OperatorTok{=}\NormalTok{ p[}\StringTok{'k7'}\NormalTok{]}\OperatorTok{*}\NormalTok{x }\OperatorTok{-}\NormalTok{ p[}\StringTok{'v8'}\NormalTok{]}\OperatorTok{*}\NormalTok{v}\OperatorTok{/}\NormalTok{(p[}\StringTok{'k8'}\NormalTok{]}\OperatorTok{+}\NormalTok{v)}
+    
+    \ControlFlowTok{if}\NormalTok{ option }\OperatorTok{==} \StringTok{'value'}\NormalTok{:}
+        \ControlFlowTok{return}\NormalTok{ np.array([dx,dy,dz,dv])}
+    \ControlFlowTok{elif}\NormalTok{ option }\OperatorTok{==} \StringTok{'sym'}\NormalTok{:}
+        \ControlFlowTok{return}\NormalTok{ Matrix([dx,dy,dz,dv])}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{StrongCoupling}{%
 \section{\texorpdfstring{Module
-\texttt{StrongCoupling}}{Module StrongCoupling}}\label{StrongCoupling}
+\texttt{StrongCoupling}}{Module StrongCoupling}}\label{StrongCoupling}}
 
 StrongCoupling.py computes the higher-order interaction functions from
 Park and Wilson 2020 for \(N=2\) models and one Floquet multiplier. In
@@ -493,10 +556,12 @@ broad strokes, this library computes functions in the following order:
 Notes: - pA requires endpoint=False. make sure corresponding dxAs are
 used.
 
-\subsection{Functions}\label{functions}
+\hypertarget{functions}{%
+\subsection{Functions}\label{functions}}
 
+\hypertarget{StrongCoupling.module_exists}{%
 \subsubsection{\texorpdfstring{Function
-\texttt{module\_exists}}{Function module\_exists}}\label{StrongCoupling.module_exists}
+\texttt{module\_exists}}{Function module\_exists}}\label{StrongCoupling.module_exists}}
 
 \begin{quote}
 \begin{verbatim}
@@ -506,10 +571,12 @@ def module_exists(
 \end{verbatim}
 \end{quote}
 
-\subsection{Classes}\label{classes}
+\hypertarget{classes}{%
+\subsection{Classes}\label{classes}}
 
+\hypertarget{StrongCoupling.StrongCoupling}{%
 \subsubsection{\texorpdfstring{Class
-\texttt{StrongCoupling}}{Class StrongCoupling}}\label{StrongCoupling.StrongCoupling}
+\texttt{StrongCoupling}}{Class StrongCoupling}}\label{StrongCoupling.StrongCoupling}}
 
 \begin{quote}
 \begin{verbatim}
@@ -645,10 +712,12 @@ z_Gbad_idx: same idea as g_small_idx for PRCs
 i_bad_idx: same idea as g_small_idx for IRCs
 \end{verbatim}
 
-\paragraph{Methods}\label{methods}
+\hypertarget{methods}{%
+\paragraph{Methods}\label{methods}}
 
+\hypertarget{StrongCoupling.StrongCoupling.bispeu}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{bispeu}}{Method bispeu}}\label{StrongCoupling.StrongCoupling.bispeu}
+\texttt{bispeu}}{Method bispeu}}\label{StrongCoupling.StrongCoupling.bispeu}}
 
 \begin{quote}
 \begin{verbatim}
@@ -664,8 +733,9 @@ def bispeu(
 silly workaround \url{https://stackoverflow.com/questions/47087109/}
 evaluate-the-output-from-scipy-2d-interpolation-along-a-curve
 
+\hypertarget{StrongCoupling.StrongCoupling.fLam2}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{fLam2}}{Method fLam2}}\label{StrongCoupling.StrongCoupling.fLam2}
+\texttt{fLam2}}{Method fLam2}}\label{StrongCoupling.StrongCoupling.fLam2}}
 
 \begin{quote}
 \begin{verbatim}
@@ -678,8 +748,9 @@ def fLam2(
 
 interp2db object
 
+\hypertarget{StrongCoupling.StrongCoupling.fmod}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{fmod}}{Method fmod}}\label{StrongCoupling.StrongCoupling.fmod}
+\texttt{fmod}}{Method fmod}}\label{StrongCoupling.StrongCoupling.fmod}}
 
 \begin{quote}
 \begin{verbatim}
@@ -699,8 +770,9 @@ needed to keep lambda input variable unique to fn.
 otherwise lambda will use the same input variable for all lambda
 functions.
 
+\hypertarget{StrongCoupling.StrongCoupling.generate_expansions}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{generate\_expansions}}{Method generate\_expansions}}\label{StrongCoupling.StrongCoupling.generate_expansions}
+\texttt{generate\_expansions}}{Method generate\_expansions}}\label{StrongCoupling.StrongCoupling.generate_expansions}}
 
 \begin{quote}
 \begin{verbatim}
@@ -712,8 +784,9 @@ def generate_expansions(
 
 generate expansions from Wilson 2020
 
+\hypertarget{StrongCoupling.StrongCoupling.generate_g}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{generate\_g}}{Method generate\_g}}\label{StrongCoupling.StrongCoupling.generate_g}
+\texttt{generate\_g}}{Method generate\_g}}\label{StrongCoupling.StrongCoupling.generate_g}}
 
 \begin{quote}
 \begin{verbatim}
@@ -729,8 +802,9 @@ generate Floquet eigenfunctions g
 
 uses Newtons method
 
+\hypertarget{StrongCoupling.StrongCoupling.generate_h_odd}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{generate\_h\_odd}}{Method generate\_h\_odd}}\label{StrongCoupling.StrongCoupling.generate_h_odd}
+\texttt{generate\_h\_odd}}{Method generate\_h\_odd}}\label{StrongCoupling.StrongCoupling.generate_h_odd}}
 
 \begin{quote}
 \begin{verbatim}
@@ -747,8 +821,9 @@ note to self: see nb page 130 for notes on indexing in sums. need to sum
 over to index N-1 out of size N to avoid double counting boundaries in
 mod operator.
 
+\hypertarget{StrongCoupling.StrongCoupling.generate_het_sym}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{generate\_het\_sym}}{Method generate\_het\_sym}}\label{StrongCoupling.StrongCoupling.generate_het_sym}
+\texttt{generate\_het\_sym}}{Method generate\_het\_sym}}\label{StrongCoupling.StrongCoupling.generate_het_sym}}
 
 \begin{quote}
 \begin{verbatim}
@@ -764,8 +839,9 @@ Returns
 
 None.
 
+\hypertarget{StrongCoupling.StrongCoupling.generate_i}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{generate\_i}}{Method generate\_i}}\label{StrongCoupling.StrongCoupling.generate_i}
+\texttt{generate\_i}}{Method generate\_i}}\label{StrongCoupling.StrongCoupling.generate_i}}
 
 \begin{quote}
 \begin{verbatim}
@@ -780,8 +856,9 @@ def generate_i(
 i0 equation is stable in forwards time i1, i2, etc equations are stable
 in backwards time.
 
+\hypertarget{StrongCoupling.StrongCoupling.generate_k_sym}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{generate\_k\_sym}}{Method generate\_k\_sym}}\label{StrongCoupling.StrongCoupling.generate_k_sym}
+\texttt{generate\_k\_sym}}{Method generate\_k\_sym}}\label{StrongCoupling.StrongCoupling.generate_k_sym}}
 
 \begin{quote}
 \begin{verbatim}
@@ -791,8 +868,9 @@ def generate_k_sym(
 \end{verbatim}
 \end{quote}
 
+\hypertarget{StrongCoupling.StrongCoupling.generate_limit_cycle}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{generate\_limit\_cycle}}{Method generate\_limit\_cycle}}\label{StrongCoupling.StrongCoupling.generate_limit_cycle}
+\texttt{generate\_limit\_cycle}}{Method generate\_limit\_cycle}}\label{StrongCoupling.StrongCoupling.generate_limit_cycle}}
 
 \begin{quote}
 \begin{verbatim}
@@ -802,8 +880,9 @@ def generate_limit_cycle(
 \end{verbatim}
 \end{quote}
 
+\hypertarget{StrongCoupling.StrongCoupling.generate_p}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{generate\_p}}{Method generate\_p}}\label{StrongCoupling.StrongCoupling.generate_p}
+\texttt{generate\_p}}{Method generate\_p}}\label{StrongCoupling.StrongCoupling.generate_p}}
 
 \begin{quote}
 \begin{verbatim}
@@ -814,8 +893,9 @@ def generate_p(
 \end{verbatim}
 \end{quote}
 
+\hypertarget{StrongCoupling.StrongCoupling.generate_p_old}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{generate\_p\_old}}{Method generate\_p\_old}}\label{StrongCoupling.StrongCoupling.generate_p_old}
+\texttt{generate\_p\_old}}{Method generate\_p\_old}}\label{StrongCoupling.StrongCoupling.generate_p_old}}
 
 \begin{quote}
 \begin{verbatim}
@@ -826,8 +906,9 @@ def generate_p_old(
 \end{verbatim}
 \end{quote}
 
+\hypertarget{StrongCoupling.StrongCoupling.generate_z}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{generate\_z}}{Method generate\_z}}\label{StrongCoupling.StrongCoupling.generate_z}
+\texttt{generate\_z}}{Method generate\_z}}\label{StrongCoupling.StrongCoupling.generate_z}}
 
 \begin{quote}
 \begin{verbatim}
@@ -839,8 +920,9 @@ def generate_z(
 \end{verbatim}
 \end{quote}
 
+\hypertarget{StrongCoupling.StrongCoupling.interp_lam}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{interp\_lam}}{Method interp\_lam}}\label{StrongCoupling.StrongCoupling.interp_lam}
+\texttt{interp\_lam}}{Method interp\_lam}}\label{StrongCoupling.StrongCoupling.interp_lam}}
 
 \begin{quote}
 \begin{verbatim}
@@ -859,8 +941,9 @@ just make and interpolated version and use that instead so only 1
 function is called for the het. terms per iteration in numerical
 iteration.
 
+\hypertarget{StrongCoupling.StrongCoupling.load_g}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_g}}{Method load\_g}}\label{StrongCoupling.StrongCoupling.load_g}
+\texttt{load\_g}}{Method load\_g}}\label{StrongCoupling.StrongCoupling.load_g}}
 
 \begin{quote}
 \begin{verbatim}
@@ -872,8 +955,9 @@ def load_g(
 
 load all Floquet eigenfunctions g or recompute
 
+\hypertarget{StrongCoupling.StrongCoupling.load_g_sym}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_g\_sym}}{Method load\_g\_sym}}\label{StrongCoupling.StrongCoupling.load_g_sym}
+\texttt{load\_g\_sym}}{Method load\_g\_sym}}\label{StrongCoupling.StrongCoupling.load_g_sym}}
 
 \begin{quote}
 \begin{verbatim}
@@ -883,8 +967,9 @@ def load_g_sym(
 \end{verbatim}
 \end{quote}
 
+\hypertarget{StrongCoupling.StrongCoupling.load_h}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_h}}{Method load\_h}}\label{StrongCoupling.StrongCoupling.load_h}
+\texttt{load\_h}}{Method load\_h}}\label{StrongCoupling.StrongCoupling.load_h}}
 
 \begin{quote}
 \begin{verbatim}
@@ -894,8 +979,9 @@ def load_h(
 \end{verbatim}
 \end{quote}
 
+\hypertarget{StrongCoupling.StrongCoupling.load_h_sym}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_h\_sym}}{Method load\_h\_sym}}\label{StrongCoupling.StrongCoupling.load_h_sym}
+\texttt{load\_h\_sym}}{Method load\_h\_sym}}\label{StrongCoupling.StrongCoupling.load_h_sym}}
 
 \begin{quote}
 \begin{verbatim}
@@ -907,8 +993,9 @@ def load_h_sym(
 
 also compute h lam
 
+\hypertarget{StrongCoupling.StrongCoupling.load_het_sym}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_het\_sym}}{Method load\_het\_sym}}\label{StrongCoupling.StrongCoupling.load_het_sym}
+\texttt{load\_het\_sym}}{Method load\_het\_sym}}\label{StrongCoupling.StrongCoupling.load_het_sym}}
 
 \begin{quote}
 \begin{verbatim}
@@ -918,8 +1005,9 @@ def load_het_sym(
 \end{verbatim}
 \end{quote}
 
+\hypertarget{StrongCoupling.StrongCoupling.load_i}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_i}}{Method load\_i}}\label{StrongCoupling.StrongCoupling.load_i}
+\texttt{load\_i}}{Method load\_i}}\label{StrongCoupling.StrongCoupling.load_i}}
 
 \begin{quote}
 \begin{verbatim}
@@ -931,8 +1019,9 @@ def load_i(
 
 load all IRCs i or recomptue
 
+\hypertarget{StrongCoupling.StrongCoupling.load_k_sym}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_k\_sym}}{Method load\_k\_sym}}\label{StrongCoupling.StrongCoupling.load_k_sym}
+\texttt{load\_k\_sym}}{Method load\_k\_sym}}\label{StrongCoupling.StrongCoupling.load_k_sym}}
 
 \begin{quote}
 \begin{verbatim}
@@ -945,8 +1034,9 @@ def load_k_sym(
 kA, kB contain the ith order terms of expanding the coupling fun. cA, cB
 contain the derivatives of the coupling fn.
 
+\hypertarget{StrongCoupling.StrongCoupling.load_limit_cycle}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_limit\_cycle}}{Method load\_limit\_cycle}}\label{StrongCoupling.StrongCoupling.load_limit_cycle}
+\texttt{load\_limit\_cycle}}{Method load\_limit\_cycle}}\label{StrongCoupling.StrongCoupling.load_limit_cycle}}
 
 \begin{quote}
 \begin{verbatim}
@@ -956,8 +1046,9 @@ def load_limit_cycle(
 \end{verbatim}
 \end{quote}
 
+\hypertarget{StrongCoupling.StrongCoupling.load_monodromy}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_monodromy}}{Method load\_monodromy}}\label{StrongCoupling.StrongCoupling.load_monodromy}
+\texttt{load\_monodromy}}{Method load\_monodromy}}\label{StrongCoupling.StrongCoupling.load_monodromy}}
 
 \begin{quote}
 \begin{verbatim}
@@ -970,8 +1061,9 @@ def load_monodromy(
 if monodromy data exists, load. if DNE or recompute required, compute
 here.
 
+\hypertarget{StrongCoupling.StrongCoupling.load_p}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_p}}{Method load\_p}}\label{StrongCoupling.StrongCoupling.load_p}
+\texttt{load\_p}}{Method load\_p}}\label{StrongCoupling.StrongCoupling.load_p}}
 
 \begin{quote}
 \begin{verbatim}
@@ -983,8 +1075,9 @@ def load_p(
 
 generate/load the ODEs for psi.
 
+\hypertarget{StrongCoupling.StrongCoupling.load_p_sym}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_p\_sym}}{Method load\_p\_sym}}\label{StrongCoupling.StrongCoupling.load_p_sym}
+\texttt{load\_p\_sym}}{Method load\_p\_sym}}\label{StrongCoupling.StrongCoupling.load_p_sym}}
 
 \begin{quote}
 \begin{verbatim}
@@ -1000,8 +1093,9 @@ to be solved using integrating factor meothod.
 
 pA{[}`sym'{]}{[}k{]} is the forcing function of order k
 
+\hypertarget{StrongCoupling.StrongCoupling.load_z}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{load\_z}}{Method load\_z}}\label{StrongCoupling.StrongCoupling.load_z}
+\texttt{load\_z}}{Method load\_z}}\label{StrongCoupling.StrongCoupling.load_z}}
 
 \begin{quote}
 \begin{verbatim}
@@ -1013,8 +1107,9 @@ def load_z(
 
 load all PRCs z or recompute
 
+\hypertarget{StrongCoupling.StrongCoupling.monodromy}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{monodromy}}{Method monodromy}}\label{StrongCoupling.StrongCoupling.monodromy}
+\texttt{monodromy}}{Method monodromy}}\label{StrongCoupling.StrongCoupling.monodromy}}
 
 \begin{quote}
 \begin{verbatim}
@@ -1034,8 +1129,9 @@ where \(\Phi\) is a matrix solution
 
 jacLC is the jacobian evaluated along the limit cycle
 
+\hypertarget{StrongCoupling.StrongCoupling.numerical_jac}{%
 \subparagraph{\texorpdfstring{Method
-\texttt{numerical\_jac}}{Method numerical\_jac}}\label{StrongCoupling.StrongCoupling.numerical_jac}
+\texttt{numerical\_jac}}{Method numerical\_jac}}\label{StrongCoupling.StrongCoupling.numerical_jac}}
 
 \begin{quote}
 \begin{verbatim}
@@ -1050,16 +1146,19 @@ def numerical_jac(
 
 return numerical Jacobian function
 
+\hypertarget{Thalamic}{%
 \section{\texorpdfstring{Module
-\texttt{Thalamic}}{Module Thalamic}}\label{Thalamic}
+\texttt{Thalamic}}{Module Thalamic}}\label{Thalamic}}
 
 Example: Thalamic model from Wilson and Ermentrout RSTA 2019, Rubin and
 Terman JCNS 2004
 
-\subsection{Functions}\label{functions-1}
+\hypertarget{functions-1}{%
+\subsection{Functions}\label{functions-1}}
 
+\hypertarget{Thalamic.coupling}{%
 \subsubsection{\texorpdfstring{Function
-\texttt{coupling}}{Function coupling}}\label{Thalamic.coupling}
+\texttt{coupling}}{Function coupling}}\label{Thalamic.coupling}}
 
 \begin{quote}
 \begin{verbatim}
@@ -1100,8 +1199,9 @@ numpy array or sympy Matrix
     returns sympy Matrix if option == 'sym'
 \end{verbatim}
 
+\hypertarget{Thalamic.main}{%
 \subsubsection{\texorpdfstring{Function
-\texttt{main}}{Function main}}\label{Thalamic.main}
+\texttt{main}}{Function main}}\label{Thalamic.main}}
 
 \begin{quote}
 \begin{verbatim}
@@ -1109,8 +1209,9 @@ def main()
 \end{verbatim}
 \end{quote}
 
+\hypertarget{Thalamic.rhs}{%
 \subsubsection{\texorpdfstring{Function
-\texttt{rhs}}{Function rhs}}\label{Thalamic.rhs}
+\texttt{rhs}}{Function rhs}}\label{Thalamic.rhs}}
 
 \begin{quote}
 \begin{verbatim}
@@ -1151,15 +1252,18 @@ numpy array or sympy Matrix
     returns sympy Matrix if option == 'sym'
 \end{verbatim}
 
-\section{\texorpdfstring{Module \texttt{CGL}}{Module CGL}}\label{CGL}
+\hypertarget{CGL}{%
+\section{\texorpdfstring{Module \texttt{CGL}}{Module CGL}}\label{CGL}}
 
 Example: Complex Ginzburgh-Landau (CGL) model from Wilson and Ermentrout
 RSTA 2019
 
-\subsection{Functions}\label{functions-2}
+\hypertarget{functions-2}{%
+\subsection{Functions}\label{functions-2}}
 
+\hypertarget{CGL.coupling}{%
 \subsubsection{\texorpdfstring{Function
-\texttt{coupling}}{Function coupling}}\label{CGL.coupling}
+\texttt{coupling}}{Function coupling}}\label{CGL.coupling}}
 
 \begin{quote}
 \begin{verbatim}
@@ -1201,8 +1305,9 @@ Returns
     returns sympy Matrix if option == 'sym'
 \end{verbatim}
 
+\hypertarget{CGL.main}{%
 \subsubsection{\texorpdfstring{Function
-\texttt{main}}{Function main}}\label{CGL.main}
+\texttt{main}}{Function main}}\label{CGL.main}}
 
 \begin{quote}
 \begin{verbatim}
@@ -1210,8 +1315,9 @@ def main()
 \end{verbatim}
 \end{quote}
 
+\hypertarget{CGL.rhs}{%
 \subsubsection{\texorpdfstring{Function
-\texttt{rhs}}{Function rhs}}\label{CGL.rhs}
+\texttt{rhs}}{Function rhs}}\label{CGL.rhs}}
 
 \begin{quote}
 \begin{verbatim}

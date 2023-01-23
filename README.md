@@ -1,12 +1,21 @@
+
 ---
-title:
-- Generating Higher-Order Coupling Functions&#58; A Python Library
+title: "Generating Higher-Order Coupling Functions for Strongly Coupled Oscillators: A Python Library"
+author: "Youngmin Park and Dan Wilson"
+output: pdf_document
+abstract: >
+  We introduce several detailed examples of how to use the StrongCoupling library. The framework is reasonably general, with no a priori restrictions on model dimension or type of coupling function. We only require differentiability. Examples in this document include the Goodwin oscillator of circadian rhythms, and a small coupled system of two chemical oscillators. 
+
 ...
+
+
 
 ---
 author:
-- Youngmin Park
+
 ...
+
+
 
 # Introduction
 
@@ -224,6 +233,40 @@ It is up to you to decide how to use these files. To plot the files, feel free t
 
 # Set up a Model: Chemical Star Network (UNDER CONSTRUCTION)
 
-Let's try setting up the model from [Norton et al 2019](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.123.148301). We will focus on the case of two oscillators for now.
+Let's try setting up the model from [Norton et al 2019](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.123.148301). We will focus on the case of two oscillators for now. From the supplementary information, the equations are:
+
+$$\frac{x}{dt} = -k_1xy + k_2 y - 2k_3 x^2 + k_4\frac{x(c_0-z)}{(c_0-z+c_{min})},$$
+$$\frac{y}{dt} = -3k_1xy - 2k_2y - k_3x^2 + k_7 u + k_9 z + k_I \frac{(c_0-z)}{b_c/b+1},$$
+$$\frac{z}{dt} = 2k_4 \frac{x(c_0-z)}{c_0 -z+c_{min}} - k_9 z - k_{10} z + k_I \frac{c_0 - z}{b_c/b+1},$$
+$$\frac{u}{dt} = 2k_1 xy + k_2y + k_3 x^2 - k_7 u,$$
+
+and the coupling $F$ is defined as
+
+$$F = \frac{1}{N}\sum_{i=1}^N V_i.$$
+
+
+
+## Right-hand Side and Coupling Function
+
+As above, we define a right-hand side function with the name ``rhs'', and a coupling function named ``coupling''. rhs is defined for a single oscillator:
+
+```python
+def rhs(t,z,pdict,option='value'):
+	x,y,z,v = z
+    
+    p = pdict
+    n = p['n']
+    
+    dx = p['v1']*p['k1']**n/(p['k1']**n+z**n) - p['v2']*x/(p['k2']+x) + p['L']
+    dy = p['k3']*x - p['v4']*y/(p['k4']+y)
+    dz = p['k5']*y - p['v6']*z/(p['k6']+z)
+    dv = p['k7']*x - p['v8']*v/(p['k8']+v)
+    
+    if option == 'value':
+        return np.array([dx,dy,dz,dv])
+    elif option == 'sym':
+        return Matrix([dx,dy,dz,dv])
+```
+
 
 
