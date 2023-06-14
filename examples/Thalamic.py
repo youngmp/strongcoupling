@@ -156,7 +156,7 @@ def main():
               'i_bad_dx':True,
               'dense':True,
               'escale':0.5,
-              'trunc_order':4,
+              'trunc_order':3,
               'dir':'home+thalamic_dat/',
               'NA':1001,
               'NB':1001,

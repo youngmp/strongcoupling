@@ -4,7 +4,7 @@ title: "Generating Higher-Order Coupling Functions for Strongly Coupled Oscillat
 author: "Youngmin Park and Dan Wilson"
 output: pdf_document
 abstract: >
-  We introduce several detailed examples of how to use the StrongCoupling library. The framework is reasonably general, with no a priori restrictions on model dimension or type of coupling function. We only require differentiability. Examples in this document include the Goodwin oscillator of circadian rhythms, and a small coupled system of two chemical oscillators. 
+  We introduce several detailed examples of how to use the StrongCoupling library, which underlies the results in the paper by [Park and Wilson SIADS 20 (3) 2021]. The framework is reasonably general, with no a priori restrictions on model dimension or type of coupling function. We only require differentiability. While the upper bound of the coupling strength has not yet been established, it is no longer necessary to consider weak coupling. Examples in this document include the Goodwin oscillator of circadian rhythms, and a small coupled system of two chemical oscillators. 
 
 ...
 
