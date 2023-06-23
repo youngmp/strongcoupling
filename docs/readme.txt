@@ -7,16 +7,14 @@ To create docs, cd to the examples directory and run the command
 
 $ pdoc3 --pdf --template-dir ../docs/ StrongCoupling Thalamic CGL > ../docs/docstrings.md
 
+Unfortunately this has to be run from the examples directory to avoid import issues.
+
 This command reads all the docstrings from the files StrongCoupling.py, Thalamic.py, and CGL.py and puts them into markdown format in /docs/docstrings.md
 
-To combine the README.md and /docs/docstrings.md files into a single .tex file, run the command from the examples directory (you can run this command anywhere, but it's written below to be run from the examples directory)
+To combine the README.md and /docs/docstrings.md files into a single .tex file, cd to the docs directory and run the command
 
-$ pandoc --from=markdown+abbreviations+tex_math_single_backslash --toc --toc-depth=4 --output=../docs/docs.tex -t latex -s ../README.md ../docs/docstrings.md 
+$ pandoc --from=markdown+abbreviations+tex_math_single_backslash --filter pandoc-citeproc --toc --toc-depth=4 --output=./docs.tex -t latex -s ../README.md ./docstrings.md ./bib.md
 
--s flag enables standalone, so it generates the .tex file that can be compiled directly using PDFLaTeX.
+-s flag enables standalone, so it generates the .tex file that can be compiled directly using PDFLaTeX. Make sure you have installed pandoc-citeproc using pip. citeproc is what takes care of biblographies.
 
 README.md contains custom information generated outside of docstrings (introduction, recommended versions).
-
-It may be convenient to combine the above commands with a double ampersand: 
-
-$ pdoc3 --pdf --template-dir ../docs/ StrongCoupling Thalamic CGL > ../docs/docstrings.md && pandoc --from=markdown+abbreviations+tex_math_single_backslash --toc --toc-depth=4 --output=../docs/docs.tex -t latex -s ../README.md ../docs/docstrings.md

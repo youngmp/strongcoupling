@@ -1,25 +1,20 @@
 
 ---
 title: "Generating Higher-Order Coupling Functions for Strongly Coupled Oscillators: A Python Library"
-author: "Youngmin Park and Dan Wilson"
+author: "Youngmin Park[^1] and Dan Wilson[^2]"
 output: pdf_document
 abstract: >
-  We introduce several detailed examples of how to use the StrongCoupling library, which underlies the results in the paper by [Park and Wilson SIADS 20 (3) 2021]. The framework is reasonably general, with no a priori restrictions on model dimension or type of coupling function. We only require differentiability. While the upper bound of the coupling strength has not yet been established, it is no longer necessary to consider weak coupling. Examples in this document include the Goodwin oscillator of circadian rhythms, and a small coupled system of two chemical oscillators. 
-
-...
-
-
-
+  We introduce several detailed examples of how to use the StrongCoupling library, which underlies the results in the paper by [@park2021high]. The framework is reasonably general, with no a priori restrictions on model dimension or type of coupling function. We only require differentiability. While the upper bound of the coupling strength has not yet been established, it is no longer necessary to consider weak coupling. Examples in this document include the Goodwin oscillator of circadian rhythms, and a small coupled system of two chemical oscillators. 
+bibliography: refs.bib
 ---
-author:
-
-...
-
+[^1]: University of Florida Department of Mathematics 1400 Stadium Rd Gainesville, FL 32611 USA
+[^2]: University of Tennessee Department of Electrical Engineering and Computer Science 1520 Middle Drive Knoxville, TN 37996
 
 
 # Introduction
 
-StrongCoupling is a script for computing the higher-order coupling functions in my paper with Dan Wilson, ``High-Order Accuracy Compuation of Coupling Functions for Strongly Coupled Oscillators''. The script generates higher-order interaction functions for phase reductions of systems containing limit cycle oscillations.
+StrongCoupling is a script for computing the higher-order coupling functions from  [@park2021high]. The script generates higher-order interaction functions for phase reductions of systems containing limit cycle oscillations. The script takes full advantage of the method developed by [@wilson2020phase] to compute the higher-order terms in the Floquet eigenfunction, phase response, and isostable response. Once these terms are computed, the script generates the interaction functions, or H-functions (see, e.g., [@park2016weakly], [@park2017utility], [@ermentrout2019recent]). However, in contrast to these methods, the coupling strength is not necessarily weak. 
+
 
 ## Dependencies
 
@@ -64,7 +59,7 @@ This file will call the complex Ginzburg-Landau (CGL) model file (CGL.py) and th
 
 # Set up a Model: Goodwin Oscillator
 
-Let's walk through setting up a script using the Goodwin oscillator ([Gonze et al 2005](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1366510/)):
+Let's walk through setting up a script using the Goodwin oscillator [@gonze2005spontaneous]:
 
 $$\frac{dX_i}{dt} = \nu_1 \frac{K_1^n}{K_1^n+Z_i^n} - \nu_2 \frac{X_i}{K_2 + X_i}+ \nu_c \frac{KF}{K_c + KF} + L,$$
 $$\frac{dY_i}{dt} = k_3 X_i - \nu_4 \frac{Y_i}{K_4 + Y_i},$$
@@ -267,6 +262,5 @@ def rhs(t,z,pdict,option='value'):
     elif option == 'sym':
         return Matrix([dx,dy,dz,dv])
 ```
-
 
 
