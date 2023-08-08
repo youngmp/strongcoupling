@@ -3,8 +3,7 @@
 title: "Generating Higher-Order Coupling Functions for Strongly Coupled Oscillators: A Python Library"
 author: "Youngmin Park[^1] and Dan Wilson[^2]"
 output: pdf_document
-abstract: >
-  We introduce several detailed examples of how to use the StrongCoupling library, which underlies the results in the paper by [@park2021high]. The framework is reasonably general, with no a priori restrictions on model dimension or type of coupling function. We only require differentiability. While the upper bound of the coupling strength has not yet been established, it is no longer necessary to consider weak coupling. Examples in this document include the Goodwin oscillator of circadian rhythms, and a small coupled system of two chemical oscillators. 
+abstract: "We introduce several detailed examples of how to use the StrongCoupling library, which underlies the results in the paper by [@park2021high]. The framework is reasonably general, with no a priori restrictions on model dimension or type of coupling function. We only require differentiability. While the upper bound of the coupling strength has not yet been established, it is no longer necessary to consider weak coupling. Examples in this document include the Goodwin oscillator of circadian rhythms, and a small coupled system of two chemical oscillators."
 bibliography: refs.bib
 
 ---
