@@ -56,17 +56,17 @@ def load_fnames_response(obj,model_pars=''):
 def load_fnames_nm(system,obj,model_pars='',coupling_pars=''):
 
     pars = (system.dir1,system.miter)
-    system.G['fname'] = '{}G_{}_f={}.d'.format(*pars)
-    system.K['fname'] = '{}K_{}_f={}.d'.format(*pars)
-    system.p['fname'] = '{}p_{}_f={}.d'.format(*pars)
-    system.h['fname'] = '{}h_{}_f={}.d'.format(*pars)
+    system.G['fname'] = '{}G_{}.d'.format(*pars)
+    system.K['fname'] = '{}K_{}.d'.format(*pars)
+    system.p['fname'] = '{}p_{}.d'.format(*pars)
+    system.h['fname'] = '{}h_{}.d'.format(*pars)
     
-    val = '{}p_data_ord={}_NP={}_NH={}_piter={}_n={}_m={}_f={}.txt'
+    val = '{}p_data_ord={}_NP={}_NH={}_piter={}_n={}_m={}.txt'
     system.p['fnames_data'] = [val.format(system.dir1,k,obj.NP,obj.NH,
                                           obj.pfactor,obj._n[1],obj._m[1])
                                for k in range(system.miter)]
     
-    val = '{}h_data_ord={}_NP={}_NH={}_piter={}_n={}_m={}_f={}.txt'
+    val = '{}h_data_ord={}_NP={}_NH={}_piter={}_n={}_m={}.txt'
     system.h['fnames_data'] = [val.format(system.dir1,k,obj.NP,obj.NH,
                                           obj.pfactor,obj._n[1],obj._m[1])
                                for k in range(system.miter)]
