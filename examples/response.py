@@ -242,7 +242,7 @@ class Response(object):
         file_dne = not(os.path.isfile(self.lc_fname))
 
         if 'lc' in self.recompute_list or file_dne:
-            print('* Computing LC data...')
+            print('* Computing limit cycle data...')
             #logging.info('* Computing LC data...')
             y,t = self.generate_lc()
 
@@ -254,7 +254,7 @@ class Response(object):
             np.savetxt(self.lc_fname,z)
 
         else:
-            print('* Loading LC data...')
+            print('* Loading limit cycle data...')
             #logging.info('* Loading LC data...')
             z = np.loadtxt(self.lc_fname)
 
@@ -279,7 +279,8 @@ class Response(object):
         self.lc['dat'] = z[:,1:]
         self.init = z[0,1:]
 
-        logging.debug('* LC period = '+str(self.T))
+        print('* Limit cycle period = '+str(self.T))
+        logging.debug('* Limit cycle period = '+str(self.T))
                     
         # Make LC data callable from inside sympy
         imp_lc = sym.zeros(self.dim)
@@ -340,8 +341,6 @@ class Response(object):
                 
         T_init,res1 = get_period(sol)
         init = np.append(sol.sol(res1),T_init)
-
-        print('Period =',T_init)
 
         counter = 0
         while np.linalg.norm(dy) > tol_root and\
