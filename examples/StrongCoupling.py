@@ -165,11 +165,10 @@ class StrongCoupling2(object):
     def _init_noforce(self,system1,system2):
         self.t,self.dt = np.linspace(0,2*np.pi,100,retstep=True)
 
-        if self.pfactor is None:
-            pfactor1 = int((np.log(.05)/system1.kappa_val))
-            pfactor2 = int((np.log(.05)/system2.kappa_val))
-            
-            self.pfactor = max([pfactor1,pfactor2])
+        pfactor1 = int((np.log(.05)/system1.kappa_val))
+        pfactor2 = int((np.log(.05)/system2.kappa_val))
+        
+        self.pfactor = max([pfactor1,pfactor2])
         
         # just keep these here.
         system2.h['dat']={};system2.h['imp']={};system2.h['lam']={}
