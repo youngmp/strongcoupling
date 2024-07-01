@@ -18,9 +18,11 @@ Notes:
 """
 import copy
 import lib.lib_sym as slib
+import lib.lib_sym2 as slib2
 
 #import lib.lib as lib
 from lib import lib
+
 from lib.interp_basic import interp_basic as interpb
 from lib.interp2d_basic import interp2d_basic as interp2db
 #from lam_vec import lam_vec
@@ -54,8 +56,6 @@ from sympy.utilities.lambdify import lambdify, implemented_function
 #import pdoc
 
 imp_fn = implemented_function
-
-
 
 #from interpolate import interp1d
 #from scipy.interpolate import interp1d#, interp2d
@@ -198,8 +198,8 @@ class StrongCoupling2(object):
         
         fnames.load_fnames_nm(system1,self)
         fnames.load_fnames_nm(system2,self)
-        slib.load_coupling_expansions(system1)
-        slib.load_coupling_expansions(system2)
+        slib2.load_coupling_expansions(system1)
+        slib2.load_coupling_expansions(system2)
 
         # mix up terms. G and K
         self.load_k_sym(system1,system2)
