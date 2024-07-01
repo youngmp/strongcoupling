@@ -3,15 +3,21 @@ Example: Goodwin circadian oscillator from Gonze et al Biophys J 2005
 
 """
 
-from StrongCoupling import StrongCoupling
-
 # user-defined
+#from nmCoupling import nmCoupling as nm
+from response import Response as rsp
+
+import numpy as np
+import sympy as sym
+from sympy import Matrix
+import scipy as sp
 
 import matplotlib.pyplot as plt
-import numpy as np
-from sympy import Matrix
 
-def rhs(t,z,pdict,option='value'):
+import os
+import argparse
+
+def rhs(t,z,pdict,option='value',idx=''):
     """
     Right-hand side of the Goodwin oscillator from
     Gonze et al Biophys J 2005
@@ -40,21 +46,25 @@ def rhs(t,z,pdict,option='value'):
     """
     
     x,y,z,v = z
+    idx = str(idx)
     
     p = pdict
-    n = p['n']
+    n = p['n'+idx]
+    om = pdict['om'+idx]
+    om_fix = pdict['om_fix'+idx]
     
-    dx = p['v1']*p['k1']**n/(p['k1']**n+z**n) - p['v2']*x/(p['k2']+x) + p['L']
-    dy = p['k3']*x - p['v4']*y/(p['k4']+y)
-    dz = p['k5']*y - p['v6']*z/(p['k6']+z)
-    dv = p['k7']*x - p['v8']*v/(p['k8']+v)
+    dx = p['v1'+idx]*p['k1'+idx]**n/(p['k1'+idx]**n+z**n)\
+        - p['v2'+idx]*x/(p['k2'+idx]+x) + p['L'+idx]
+    dy = p['k3'+idx]*x - p['v4'+idx]*y/(p['k4'+idx]+y)
+    dz = p['k5'+idx]*y - p['v6'+idx]*z/(p['k6'+idx]+z)
+    dv = p['k7'+idx]*x - p['v8'+idx]*v/(p['k8'+idx]+v)
     
-    if option == 'value':
-        return np.array([dx,dy,dz,dv])
-    elif option == 'sym':
-        return Matrix([dx,dy,dz,dv])
+    if option in ['value','val']:
+        return om*om_fix*np.array([dx,dy,dz,dv])
+    elif option in ['sym','symbolic']:
+        return om*om_fix*Matrix([dx,dy,dz,dv])
 
-def coupling(vars_pair,pdict,option='value'):
+def coupling(vars_pair,pdict,option='value',idx=''):
     """
     
     Ccoupling function between Goodwin oscillators
@@ -85,34 +95,33 @@ def coupling(vars_pair,pdict,option='value'):
     
     """
     x1,y1,z1,v1,x2,y2,z2,v2 = vars_pair
+    idx = str(idx)
     
-    K = pdict['K']
+    K = pdict['K'+idx]
     #vc = pdict['eps']
-    kc = pdict['kc']
-    F = 0.5*(v1+v2)
+    kc = pdict['kc'+idx]
+    F = (v1+v2)/2
+
+    om = pdict['om'+idx]
+    om_fix = pdict['om_fix'+idx]
     
-    if option == 'value':
-        return np.array([K*F/(kc+K*F),0,0,0])
-    elif option == 'sym':
-        return Matrix([K*F/(kc+K*F),0,0,0])
-    
+    if option in ['value','val']:
+        return om*om_fix*np.array([K*F/(kc+K*F),0,0,0])
+    elif option in ['sym','symbolic']:
+        return om*om_fix*Matrix([K*F/(kc+K*F),0,0,0])
 
 def main():
 
-    
     pd1 = {'v1':.84,'v2':.42,'v4':.35,'v6':.35,'v8':1,
            'k1':1,'k2':1,'k3':.7,'k4':1,'k5':.7,
            'k6':1,'k7':.35,'k8':1,'K':0.5,'kc':1,
            'n':6,'L':0,'eps':0,'om':1,'om_fix':1}
 
-    T_init = 24.2
-    LC_init = np.array([.3882,.523,1.357,.4347,T_init])
-
     kws1 = {'var_names':['x','y','z','v'],
             'pardict':pd1,
             'rhs':rhs,
             'coupling':coupling,
-            'init':LC_init,
+            'init':np.array([.3882,.523,1.357,.4347,24.2]),
             'TN':2000,
             'trunc_order':2,
             'z_forward':False,
@@ -124,6 +133,7 @@ def main():
             'rel_tol':1e-9,
             'save_fig':True}
 
+    
     system1 = rsp(idx=0,model_name='gw0',**kws1)
     system2 = rsp(idx=1,model_name='gw1',**kws1)
 
@@ -136,6 +146,8 @@ def main():
              NP=201,
              NH=201)
 
+
+
 if __name__ == "__main__":
-    __spec__ = None
+    
     main()

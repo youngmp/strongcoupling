@@ -8,8 +8,8 @@ todo: need to check accuracy of response functions
 """
 
 
-import lib.lib_sym as slib
-from lib import lib
+import lib.lib_sym2 as slib
+from lib import lib2 as lib
 from lib import fnames
 from lib.fast_interp import interp1d
 from lib.util import get_period
@@ -77,7 +77,7 @@ class Response(object):
                  save_fig=False,
                  factor=1,
 
-                 mode='nm'):
+                 mode='1:1'):
             
         var_names = copy.deepcopy(var_names)
         pardict = copy.deepcopy(pardict)
