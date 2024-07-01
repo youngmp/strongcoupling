@@ -98,55 +98,43 @@ def coupling(vars_pair,pdict,option='value'):
     
 
 def main():
+
     
-    var_names = ['x','y','z','v']
-    
-    # parameters from Wilson 2020
-    pardict = {'v1_val':.84,'v2_val':.42,'v4_val':.35,'v6_val':.35,'v8_val':1,
-               'k1_val':1,'k2_val':1,'k3_val':.7,'k4_val':1,'k5_val':.7,
-               'k6_val':1,'k7_val':.35,'k8_val':1,'K_val':0.5,'kc_val':1,
-               'n_val':6,'L_val':0,'eps_val':0}
-    
-    kwargs = {'g_forward':True,'z_forward':False,'i_forward':False,
-              'i_bad_dx':[False,True,False,False,False,False],
-              'dense':True,
-              'recompute_g':False,
-              'recompute_p':False,
-              'dir':'home+goodwin_dat/',
-              'trunc_order':5,
-              'trunc_deriv':5,
-              'NA':2000,
-              'p_iter':20,
-              'max_iter':200,
-              'TN':2000,
-              'rtol':1e-13,
-              'atol':1e-13,
-              'rel_tol':1e-10,
-              'method':'LSODA',
-              'processes':4,
-              'chunksize':10000}
-    
-    
+    pd1 = {'v1':.84,'v2':.42,'v4':.35,'v6':.35,'v8':1,
+           'k1':1,'k2':1,'k3':.7,'k4':1,'k5':.7,
+           'k6':1,'k7':.35,'k8':1,'K':0.5,'kc':1,
+           'n':6,'L':0,'eps':0,'om':1,'om_fix':1}
+
     T_init = 24.2
     LC_init = np.array([.3882,.523,1.357,.4347,T_init])
-    
-    a = StrongCoupling(rhs,coupling,LC_init,var_names,pardict,**kwargs)
-    
-    # plot H functions
-    phi = np.linspace(0,a.T,a.NA)
-    for k in range(a.trunc_order+1):
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.plot(phi,a.hodd['dat'][k])
-        
-        ax.set_title('Goodwin H Function Order '+str(k))
-        ax.set_xlabel(r'$\phi$')
-        ax.set_ylabel(r'$-2\mathcal{H}^{('+str(k)+r')}_\text{odd}$')
-        #ax.set_ylim(-1000,1000)
-        #plt.tight_layout()
-        #plt.show(block=True)
-        plt.savefig('goodwin_hodd'+str(k)+'.pdf')
-        #time.sleep(.1)
+
+    kws1 = {'var_names':['x','y','z','v'],
+            'pardict':pd1,
+            'rhs':rhs,
+            'coupling':coupling,
+            'init':LC_init,
+            'TN':2000,
+            'trunc_order':2,
+            'z_forward':False,
+            'i_forward':False,
+            'i_bad_dx':[False,True,False,False],
+            'max_iter':20,
+            'rtol':1e-12,
+            'atol':1e-12,
+            'rel_tol':1e-9,
+            'save_fig':True}
+
+    system1 = rsp(idx=0,model_name='gw0',**kws1)
+    system2 = rsp(idx=1,model_name='gw1',**kws1)
+
+    a11 = nm(system1,system2,
+             #recompute_list=['p_data_tg0','p_data_tg1',
+             # 'h_data_tg0','h_data_tg1'],
+             #recompute_list=recompute_list,
+             _n=('om0',1),_m=('om1',1),
+             save_fig=True,
+             NP=201,
+             NH=201)
 
 if __name__ == "__main__":
     __spec__ = None

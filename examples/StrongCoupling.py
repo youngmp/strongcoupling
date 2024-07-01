@@ -72,7 +72,8 @@ def module_exists(module_name):
 class StrongCoupling(object):
     
     
-    def __init__(self,rhs,coupling,LC_init,var_names,pardict,**kwargs):
+    def __init__(self,rhs,coupling,LC_init,var_names,pardict,
+                 legacy=True,**kwargs):
 
         """
         See the defaults dict below for allowed kwargs.
@@ -474,11 +475,15 @@ class StrongCoupling(object):
             slib.load_jac_sym(self)
             
             rule = {**self.rule_LC,**self.rule_par}
-                
+
+            print('jac sym',self.jac_sym)
+            print('jac sym subs',self.jac_sym.subs(rule))
+            print('rule',rule)
             # callable jacobian matrix evaluated along limit cycle
             self.jacLC = lambdify((self.t),self.jac_sym.subs(rule),
                                   modules='numpy')
-            
+
+            start = time.time();print(self.jacLC(20));end = time.time();print('jac eval time',end-start)
             
             # get monodromy matrix
             self.load_monodromy()
@@ -636,7 +641,7 @@ class StrongCoupling(object):
         self.LC_vec = lambdify(self.t,imp_lc,modules='numpy')
         #self.LC_vec = lam_vec(lam_list)
             
-        if False:
+        if True:
             fig, axs = plt.subplots(nrows=self.dim,ncols=1)
             print('LC init',end=', ')
             
@@ -785,8 +790,6 @@ class StrongCoupling(object):
             
             y_final = sol.y.T[-1,:]
             
-
-            #print(np.dot(np.linalg.inv(J),J))
             b = np.append(init[:-1]-y_final,0)
             dy = np.dot(np.linalg.inv(J),b)
             init += dy
@@ -819,6 +822,8 @@ class StrongCoupling(object):
         #                      0.256223512263409,
         #                      0.229445856262051,
         #                      0.438912900900591])
+
+        print('lc init',sol.y.T[peak_idx,:])
         
         # run finalized limit cycle solution
         sol = solve_ivp(self.rhs,[0,init[-1]],sol.y.T[peak_idx,:],
@@ -849,11 +854,14 @@ class StrongCoupling(object):
             initm = copy.deepcopy(self.eye)
             r,c = np.shape(initm)
             init = np.reshape(initm,r*c)
-            
+
+            start = time.time();
             sol = solve_ivp(self.monodromy,[0,self.tLC[-1]],init,
                             t_eval=self.tLC,
                             method=self.method,
                             rtol=1e-13,atol=1e-13)
+
+            end = time.time();print('mon eval time',end-start)
             
             self.sol = sol.y.T
             self.M = np.reshape(self.sol[-1,:],(r,c))
@@ -877,10 +885,11 @@ class StrongCoupling(object):
 
         else:
             self.M = np.loadtxt(self.monodromy_fname)
-        
+
+        print('monodromy',self.M)
         self.eigenvalues, self.eigenvectors = np.linalg.eig(self.M)
         
-        print(self.eigenvalues)
+        print('eigenvals',self.eigenvalues)
         print(np.log(self.eigenvalues)/self.T)
         
         # get smallest eigenvalue and associated eigenvector
@@ -892,6 +901,8 @@ class StrongCoupling(object):
         
         if np.sum(self.eigenvectors[:,self.min_lam_idx]) < 0:
             self.eigenvectors[:,self.min_lam_idx] *= -1
+
+        print('evec',self.eigenvectors)
         
         #print('eigenvalues',self.eigenvalues)
         #print('eiogenvectors',self.eigenvectors)
@@ -1159,6 +1170,9 @@ class StrongCoupling(object):
             for key in self.var_names:
                 self.z['sym_'+key] = lib.load_dill(self.z['sym_fnames_'+key])
                 self.i['sym_'+key] = lib.load_dill(self.i['sym_fnames_'+key])
+                
+                print('')
+                print(key,self.z['sym_'+key])
         
     def generate_het_sym(self):
         """
@@ -1475,7 +1489,7 @@ class StrongCoupling(object):
                         t_eval=tLC,
                         method=self.method,dense_output=True,
                         rtol=self.rtol,atol=self.atol)
-    
+        
         if backwards:
             iu = sol.y.T[::-1,:]
             
@@ -1634,6 +1648,9 @@ class StrongCoupling(object):
             
             self.cA['vec'] = lib.load_dill([self.cA['sym_fname']])[0]
             self.cB['vec'] = lib.load_dill([self.cB['sym_fname']])[0]
+
+        for i in range(len(self.kA['sym_x'])):
+            print(i,': ',self.kA['sym_x'][i])
             
     def generate_k_sym(self):
         # generate terms involving the coupling term (see K in paper).
@@ -1759,19 +1776,19 @@ class StrongCoupling(object):
                 pA_data = np.loadtxt(fname)
                 
             
-            if False:
+            if True:
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
                 
-                ax.matshow(pA_data,cmap='viridis',aspect='auto')
-                
-                
-                ax.set_ylabel('B[::-1]')
+                ax.imshow(pA_data,cmap='viridis',aspect='auto')
+                                
+                ax.set_ylabel('B')
                 ax.set_xlabel('A')
                 ax.set_title('pA data'+str(i)\
                              +' NA='+str(self.NA)\
                              +' piter='+str(self.p_iter))
-                plt.show(block=True)
+                #plt.show(block=True)
+                plt.savefig('figs_temp/p_'+str(i)+'.png')
                 plt.close()
             
             pA_interp = interp2d(self.Aarr_noend,
@@ -1872,6 +1889,12 @@ class StrongCoupling(object):
         
             #lam_hetA_data[:,i] = lam_hetA(ta2,tb2)
             lam_hetA_data[:,i] = glam(*xs)
+
+        fig,axs = plt.subplots()
+        im = axs.imshow(lam_hetA_data)
+        plt.colorbar(im,ax=axs)
+        plt.savefig('figs_temp/lam_heta_'+str(k)+'.png')
+        plt.close()
         
         # pg 184 brandeis notebook
         # u \in [-\infty 0] and (0,theta_1)
@@ -2310,6 +2333,7 @@ class StrongCoupling(object):
     def load_h(self):
         
         self.hodd['dat'] = []
+        self.hlam = {}
         
         for i in range(self.miter):
             fname = self.hodd['dat_fnames'][i]
@@ -2358,10 +2382,13 @@ class StrongCoupling(object):
         # https://stackoverflow.com/questions/30738840/...
         # best-practice-for-using-common-subexpression-elimination...
         # -with-lambdify-in-sympy
+        #print('hodd sym',self.hodd['sym'][k].subs(rule))
+        syms = [self.thA,self.thB]
+
         repl, redu = sym.cse(self.hodd['sym'][k].subs(rule))
         
         funs = []
-        syms = [self.thA,self.thB]
+        
         for ii, v in enumerate(repl):
             funs.append(lambdify(syms,v[1],modules='numpy'))
             syms.append(v[0])
@@ -2369,17 +2396,28 @@ class StrongCoupling(object):
         glam = lambdify(syms,redu[0],modules='numpy')
         
         #lam_h_data[:,j] = glam(*xs)
-    
+
         for j in range(self.NA):
             eta = self.A_array[j]
-            
+
             xs = [t,t+eta]
             for f in funs:
                 xs.append(f(*xs))
                 
             h[j] = np.sum(glam(*xs))*self.dxA/self.T
-            
-        if False:
+
+
+        #print('h, i',k,self.hodd['sym'][k].subs(rule))
+
+        #for j in range(self.NA):
+        #    eta = self.A_array[j]
+        #    xs = [t,t+eta]
+        #    
+        #    glam = lambdify(syms,self.hodd['sym'][k].subs(rule))
+        #
+        #    h[j] = np.sum(glam(*xs))*self.dxA/self.T
+        
+        if True:
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.plot(h)
