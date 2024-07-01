@@ -111,7 +111,7 @@ class StrongCoupling2(object):
         self.ths = symbols(ths_str,real=True)
 
         # discretization for p_X,p_Y
-        self.NP = self.NH
+        self.NP = NH
         self.x,self.dx = np.linspace(0,2*np.pi,self.NP,retstep=True,endpoint=False)
 
         self.an,self.dan = np.linspace(0,2*np.pi*self._n[1],self.NP*self._n[1],
