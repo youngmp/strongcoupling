@@ -107,6 +107,9 @@ class StrongCoupling2(object):
 
         self.om = 1
 
+        self._n = (1,1)
+        self._m = (1,1)
+
         ths_str = ' '.join(['th'+str(i) for i in range(2)])
         self.ths = symbols(ths_str,real=True)
 
