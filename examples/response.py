@@ -250,7 +250,7 @@ class Response(object):
 
         if 'lc' in self.recompute_list or file_dne:
             print('* Computing LC data...')
-            logging.info('* Computing LC data...')
+            #logging.info('* Computing LC data...')
             y,t = self.generate_lc()
 
             nr,nc = np.shape(y)
@@ -262,7 +262,7 @@ class Response(object):
 
         else:
             print('* Loading LC data...')
-            logging.info('* Loading LC data...')
+            #logging.info('* Loading LC data...')
             z = np.loadtxt(self.lc_fname)
 
         # normalize period
@@ -279,8 +279,6 @@ class Response(object):
 
         else:
             self.T = z[-1,0]
-
-        print('self.T',self.T,'omfix',self.pardict[self.om_fix_key])
 
         self.tlc,self.dtlc = np.linspace(0,self.T,self.TN,retstep=True)
         self.lc['t'] = self.tlc
@@ -350,7 +348,7 @@ class Response(object):
         T_init,res1 = get_period(sol)
         init = np.append(sol.sol(res1),T_init)
 
-        print('t init',T_init)
+        print('Period =',T_init)
 
         counter = 0
         while np.linalg.norm(dy) > tol_root and\
@@ -465,7 +463,7 @@ class Response(object):
         file_dne = not(os.path.isfile(self.m_fname))
         if 'm' in self.recompute_list or file_dne:
             print('* Computing monodromy...')
-            logging.info('* Computing monodromy...')
+            #logging.info('* Computing monodromy...')
 
             initm = copy.deepcopy(self.eye)
             r,c = np.shape(initm)
@@ -477,7 +475,7 @@ class Response(object):
                             method=self.method,
                             rtol=1e-13,atol=1e-13)
             
-            end = time.time();print('mon eval time',end-start)
+            end = time.time();#print('mon eval time',end-start)
             
             self.sol = sol.y.T
             self.M = np.reshape(self.sol[-1,:],(r,c))
@@ -485,7 +483,7 @@ class Response(object):
             
         else:
             print('* Loading monodromy...')
-            logging.info('* Loading monodromy...')
+            #logging.info('* Loading monodromy...')
             self.M = np.loadtxt(self.m_fname)
         
         self.eigenvalues, self.eigenvectors = np.linalg.eig(self.M)
@@ -519,8 +517,8 @@ class Response(object):
         logging.debug('z0_init'+str(self.z0_init))
         logging.debug('i0_init'+str(self.i0_init))
 
-        print('* Floquet Exponent kappa ='+str(self.kappa_val))
-        logging.info('* Floquet Exponent kappa ='+str(self.kappa_val))
+        print('* Floquet Exponent ='+str(self.kappa_val))
+        #logging.info('* Floquet Exponent ='+str(self.kappa_val))
 
 
     def monodromy(self,t,z):
@@ -564,7 +562,7 @@ class Response(object):
         
         if 'g_sym' in self.recompute_list or files_dne:
             print('* Computing g symbolic...')
-            logging.info('* Computing g symbolic...')
+            #logging.info('* Computing g symbolic...')
             
             # create symbolic derivative
             sym_collected = slib.generate_g_sym(self)
@@ -580,7 +578,7 @@ class Response(object):
                     
         else:
             print('* Loading g symbolic...')
-            logging.info('* Loading g symbolic...')
+            #logging.info('* Loading g symbolic...')
             for key in self.var_names:
                 self.g['sym_'+key] = lib.load_dill(self.g['sym_fnames_'+key])
 
@@ -597,7 +595,7 @@ class Response(object):
             self.g['lam_'+key] = []
 
         print('* Computing g...')        
-        logging.info('* Computing g...')
+        #logging.info('* Computing g...')
         for i in range(self.miter):
 
             fname = self.g['dat_fnames'][i]
@@ -717,7 +715,7 @@ class Response(object):
             self.z['avg_'+key] = []
 
         print('* Computing z...')
-        logging.info('* Computing z...')
+        #logging.info('* Computing z...')
         for i in range(self.miter):
             
             fname = self.z['dat_fnames'][i]
@@ -828,7 +826,7 @@ class Response(object):
             self.i['lam_'+key] = []
 
         print('* Computing i...')
-        logging.info('* Computing i...')
+        #logging.info('* Computing i...')
         for i in range(self.miter):
 
             fname = self.i['dat_fnames'][i]
@@ -1013,7 +1011,7 @@ class Response(object):
         
         if 'het' in self.recompute_list or files_dne:
             print('* Computing heterogeneous terms...')
-            logging.info('* Computing heterogeneous terms...')
+            #logging.info('* Computing heterogeneous terms...')
             sym_collected = self.generate_het_sym()
             
             for i in range(self.miter):
@@ -1036,7 +1034,7 @@ class Response(object):
             
         else:
             print('* Loading heterogeneous terms...')
-            logging.info('* Loading heterogeneous terms...')
+            #logging.info('* Loading heterogeneous terms...')
             self.A, = lib.load_dill([self.A_fname])
             for key in self.var_names:
                 self.z['sym_'+key] = lib.load_dill(self.z['sym_fnames_'+key])
@@ -1084,9 +1082,7 @@ class Response(object):
             rule_trunc.update({self.psi**k:0})
             
         for i,key in enumerate(self.var_names):
-            logging.info('z,i het sym subs key='+str(key))
-
-
+            #logging.info('z,i het sym subs key='+str(key))
             
             tmp = het[i].subs(rule)
             tmp = sym.expand(tmp,basic=True,deep=True,
@@ -1246,8 +1242,8 @@ class Response(object):
         print(fn+str(k)+' ini'+str(data[0,:]))
         print(fn+str(k)+' fin'+str(data[-1,:]))
               
-        logging.info(fn+str(k)+' ini'+str(data[0,:]))
-        logging.info(fn+str(k)+' fin'+str(data[-1,:]))
+        #logging.info(fn+str(k)+' ini'+str(data[0,:]))
+        #logging.info(fn+str(k)+' fin'+str(data[-1,:]))
         axs[0].set_title(fn+str(k))
         plt.tight_layout()
         plt.savefig(path_loc+fn+str(k)+'_'+self.model_name+'.png')
