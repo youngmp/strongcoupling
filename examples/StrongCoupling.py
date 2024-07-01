@@ -60,6 +60,7 @@ imp_fn = implemented_function
 from scipy.interpolate import interp2d
 from scipy.integrate import solve_ivp
 
+
 def module_exists(module_name):
     try:
         __import__(module_name)
@@ -69,11 +70,125 @@ def module_exists(module_name):
         return True
 
 
+# updated coupling class. much more efficient
+# less user unfriendly.
+class StrongCoupling2(object):
+
+    def __init__(self,system1,system2,
+                 NP=100,NH=100,
+                 trunc_deriv=3,
+                 
+                 _n=(None,1),_m=(None,1),
+                 
+                 method='LSODA', # good shit                 
+                 max_n=-1, # Fourier terms. -1 = no truncation
+                 
+                 log_level='CRITICAL',log_file='log_nm.log',
+                 save_fig=False,
+                 
+                 recompute_list=[]):
+        self.save_fig = save_fig
+
+        self._expand_kws = {'basic':True,'deep':True,'power_base':False,
+                            'power_exp':False,'mul':True,'log':False,
+                            'multinomial':True}
+
+        system1 = copy.deepcopy(system1)
+        system2 = copy.deepcopy(system2)
+
+        assert(type(_n) is tuple);assert(type(_m) is tuple)
+        #assert(_n[0] in system1.pardict);assert(_m[0] in system2.pardict)
+
+        self.system1 = system1;self.system2 = system2
+        self.recompute_list = recompute_list
+        self.lowdim = lowdim
+
+        self.trunc_deriv = trunc_deriv
+        self._n = _n;self._m = _m
+        #self.Tx = self.system1.T/self._n[1]
+        #self.Ty = self.system2.T/self._m[1]
+
+        self.om = self._n[1]/self._m[1]
+        self.T = self._m[1]*2*np.pi
+
+        self.system1.pardict['om'+str(system1.idx)] = self._n[1]
+        self.system2.pardict['om'+str(system2.idx)] = self._m[1]
+
+        ths_str = ' '.join(['th'+str(i) for i in range(2)])
+        self.ths = symbols(ths_str,real=True)
+
+        # discretization for p_X,p_Y
+        self.NP = NP
+        self.x,self.dx = np.linspace(0,2*np.pi,NP,retstep=True,endpoint=False)
+
+        self.an,self.dan = np.linspace(0,2*np.pi*self._n[1],NP*self._n[1],
+                                       retstep=True,endpoint=False)
+
+        # discretization for H_X,H_Y
+        self.NH = NH
+        self.bn,self.dbn = np.linspace(0,2*np.pi*self._m[1],NH,
+                                       retstep=True,endpoint=False)
+
+        self.be,self.dbe = np.linspace(0,2*np.pi*self._m[1],NH*self._m[1],
+                                       retstep=True,endpoint=True)
+
+        self.bne,self.dbne = np.linspace(0,2*np.pi*self._n[1],NH*self._n[1],
+                                         retstep=True,endpoint=True)        
+
+        self.log_level = log_level;self.log_file = log_file
+
+        if self.log_level == 'DEBUG':
+            self.log_level = logging.DEBUG
+        elif self.log_level == 'INFO':
+            self.log_level = logging.INFO
+        elif self.log_level == 'WARNING':
+            self.log_level = logging.WARNING
+        elif self.log_level == 'ERROR':
+            self.log_level = logging.ERROR
+        elif self.log_level == 'CRITICAL':
+            self.log_level = logging.CRITICAL
+
+        FORMAT = '%(asctime)s %(message)s'
+        logging.basicConfig(filename=self.log_file,level=self.log_level,
+                            format=FORMAT)
+
+        system1.h['dat']={};system1.h['imp']={};system1.h['lam']={}
+        system1.h['sym']={};system1.p['dat']={};system1.p['imp']={}
+        system1.p['lam']={};system1.p['sym']={}
+
+        # global replacement rules based on system index
+        system1.rule_lc={};system1.rule_g={};system1.rule_z={}
+        system1.rule_i={};system1.rule_p={}
+
+        if not(system1.forcing):
+            system2.rule_lc={};system2.rule_g={};system2.rule_z={}
+            system2.rule_i={};system2.rule_p={}
+
+        for j,key in enumerate(system1.var_names):
+            in1 = self.ths[system1.idx]
+            system1.rule_lc[system1.syms[j]] = system1.lc['imp_'+key](in1)
+
+        for key in system1.var_names:
+            for k in range(system1.miter):
+                in1 = self.ths[system1.idx]
+
+                kg = sym.Indexed('g_'+system1.model_name+'_'+key,k)
+                system1.rule_g[kg] = system1.g['imp_'+key][k](in1)
+
+                kz = sym.Indexed('z_'+system1.model_name+'_'+key,k)
+                system1.rule_z[kz] = system1.z['imp_'+key][k](in1)
+
+                ki = sym.Indexed('i_'+system1.model_name+'_'+key,k)
+                system1.rule_i[ki] = system1.i['imp_'+key][k](in1)
+
+        self._init_noforce(system1,system2)
+
+
+# below is the legacy strongcoupling class
 class StrongCoupling(object):
     
     
-    def __init__(self,rhs,coupling,LC_init,var_names,pardict,
-                 legacy=True,**kwargs):
+    def __init__(self,rhs,coupling,LC_init,var_names,pardict,**kwargs):
 
         """
         See the defaults dict below for allowed kwargs.
@@ -209,21 +324,20 @@ class StrongCoupling(object):
             i_bad_idx: same idea as g_small_idx for IRCs
         
         """
-
         defaults = {
             'trunc_order':3,
             'trunc_deriv':3,
-            
+
             'TN':20000,
             'dir':None,
             'LC_long_sim_time':500,
             'LC_eps_time':1e-4,
             'LC_tol':1e-13,
-            
+
             'NA':500,
             'p_iter':10,
             'max_iter':100,
-            
+
             'rtol':1e-7,
             'atol':1e-7,
             'rel_tol':1e-6,
@@ -231,20 +345,20 @@ class StrongCoupling(object):
             'g_forward':True,
             'z_forward':True,
             'i_forward':True,
-            
+
             'g_bad_dx':False,
             'z_bad_dx':False,
             'i_bad_dx':False,
-            
+
             'dense':False,
             'escale':1,
-            
+
             'g_jac_eps':1e-3,
             'z_jac_eps':1e-3,
             'i_jac_eps':1e-3,
-            
+
             'coupling_pars':'',
-            
+
             'recompute_LC':False,
             'recompute_monodromy':False,
             'recompute_g_sym':False,
@@ -258,109 +372,109 @@ class StrongCoupling(object):
             'recompute_h_sym':False,
             'recompute_h':False,
             'load_all':True,
-            
+
             'processes':2,
             'chunksize':10000
             }
-        
+
         self.rhs = rhs
         self.coupling = coupling
         self.LC_init = LC_init
-    
+
         self.rule_par = {}
-        
+
         # if no kwarg for default, use default. otherwise use input kwarg.
         for (prop, default) in defaults.items():
             value = kwargs.get(prop, default)
             setattr(self, prop, value)
-        
+
         assert((type(self.g_forward) is bool) or\
                (type(self.g_forward) is list))
         assert((type(self.z_forward) is bool) or\
                (type(self.z_forward) is list))
         assert((type(self.i_forward) is bool) or
                (type(self.i_forward) is list))
-        
+
         assert((type(self.g_jac_eps) is float) or\
                (type(self.g_jac_eps) is list))
         assert((type(self.z_jac_eps) is float) or\
                (type(self.z_jac_eps) is list))
         assert((type(self.i_jac_eps) is float) or\
                (type(self.i_jac_eps) is list))
-            
+
         # update self with model parameters and save to dict
         self.pardict_sym = {}
         self.pardict_val = {}
         for (prop, value) in pardict.items():
-            
+
             # define sympy names, and parameter replacement rule.
             if prop.split('_')[-1] == 'val':
                 parname = prop.split('_')[0]
-                
+
                 # save parname_val
                 setattr(self,prop,value)
-                
+
                 # sympy name using parname
                 symvar = symbols(parname)
                 setattr(self,parname,symvar)
-                
+
                 # define replacement rule for parameters
                 # i.e. parname (sympy) to parname_val (float/int)
                 self.rule_par.update({symvar:value})
                 self.pardict_sym.update({parname:symvar})
                 self.pardict_val.update({parname:value})
-    
+
 
         # variable names
         self.var_names = var_names
         self.dim = len(self.var_names)
-        
+
         # max iter number
         self.miter = self.trunc_order+1
 
         # Symbolic variables and functions
         self.eye = np.identity(self.dim)
         self.psi, self.eps, self.kappa = sym.symbols('psi eps kappa')
-        
-        
+
+
         # single-oscillator variables and coupling variadef bles.
         # single oscillator vars use the names from var_names
         # A and B are appended to coupling variables
         # to denote oscillator 1 and 2.
-        
+
         self.vars = []
         self.A_vars = []
         self.B_vars = []
-        
+
         self.dA_vars = []
         self.dB_vars = []
-        
+
         #self.A_pair = Matrix([[self.vA,self.hA,self.rA,self.wA,
         #                       self.vB,self.hB,self.rB,self.wB]])
         self.A_pair = sym.zeros(1,2*self.dim)
         self.B_pair = sym.zeros(1,2*self.dim)
-        
+
         self.dA_pair = sym.zeros(1,2*self.dim)
         self.dB_pair = sym.zeros(1,2*self.dim)
-        
+
         self.dx_vec = sym.zeros(1,self.dim) 
         self.x_vec = sym.zeros(self.dim,1)
-        
+
         #Matrix([[self.dv,self.dh,self.dr,self.dw]])
         #Matrix([[self.v],[self.h],[self.r],[self.w]])
-        
+
         for i,name in enumerate(var_names):
             # save var1, var2, ..., varN
             symname = symbols(name)
             setattr(self, name, symname)
             self.vars.append(symname)
             self.x_vec[i] = symname
-            
+
             # save dvar1, dvar2, ..., dvarN
             symd = symbols('d'+name)
             setattr(self, 'd'+name, symd)
             self.dx_vec[i] = symd
-            
+
             # save var1A, var2A, ..., varNA,
             #      var1B, var2B, ..., varNB
             symA = symbols(name+'A')
@@ -369,61 +483,61 @@ class StrongCoupling(object):
             setattr(self, name+'B', symB)
             self.A_vars.append(symA)
             self.B_vars.append(symB)
-            
+
             self.A_pair[:,i] = Matrix([[symA]])
             self.A_pair[:,i+self.dim] = Matrix([[symB]])
-            
+
             self.B_pair[:,i] = Matrix([[symB]])
             self.B_pair[:,i+self.dim] = Matrix([[symA]])
-            
+
             symdA = symbols('d'+name+'A')
             symdB = symbols('d'+name+'B')
             setattr(self, 'd'+name+'A', symdA)
             setattr(self, 'd'+name+'B', symdB)
-            
+
             self.dA_vars.append(symdA)
             self.dB_vars.append(symdB)
-            
+
             self.dA_pair[:,i] = Matrix([[symdA]])
             self.dA_pair[:,i+self.dim] = Matrix([[symdB]])
-            
+
             self.dB_pair[:,i] = Matrix([[symdB]])
             self.dB_pair[:,i+self.dim] = Matrix([[symdA]])
-            
-            
-            
+
+
+
         self.t = symbols('t')
         self.tA, self.tB = symbols('tA tB')
-        
-        
+
+
         #self.dv, self.dh, self.dr, self.dw = symbols('dv dh dr dw')
-        
+
         # coupling variables
         self.thA, self.psiA = symbols('thA psiA')
         self.thB, self.psiB = symbols('thB psiB')
-        
+
         # function dicts
         # individual functions
         self.LC = {}
         self.g = {}
         self.z = {}
         self.i = {}
-        
+
         # for coupling
         self.cA = {}
         self.cB = {}
-        
+
         self.kA = {}
         self.kB = {}
-        
+
         self.pA = {}
         self.pB = {}
         self.hodd = {}
         self.het2 = {}
-        
+
         #from os.path import expanduser
         #home = expanduser("~")
-        
+
         # filenames and directories
         if self.dir is None:
             raise ValueError('Please define a data directory using \
@@ -431,49 +545,49 @@ class StrongCoupling(object):
                              Write dir=\'home+file\' to save to file in the\
                              home directory. Write dir=\'file\' to save to\
                              file in the current working directory.')
-            
+
         elif self.dir.split('+')[0] == 'home':
             from pathlib import Path
             home = str(Path.home())
             self.dir = home+'/'+self.dir.split('+')[1]
-            
+
         else:
             self.dir = self.dir
-        
+
         print('Saving data to '+self.dir)
-        
+
         if (not os.path.exists(self.dir)):
             os.makedirs(self.dir)
-        
+
         if self.coupling_pars == '':
             print('NOTE: coupling_pars set to default empty string.'\
                   +'Please specify coupling_pars in kwargs if'\
                   +'varying parameters.')
-        
+
         lib.generate_fnames(self,coupling_pars=self.coupling_pars)
-        
+
         # make rhs callable
         #self.rhs_sym = self.thal_rhs(0,self.vars,option='sym')
         self.rhs_sym = rhs(0,self.vars,self.pardict_sym,
                                 option='sym')
-        
+
         #print('jac sym',self.jac_sym[0,0])
         self.load_limit_cycle()
-        
+
         self.A_array,self.dxA = np.linspace(0,self.T,self.NA,
                                             retstep=True,
                                             endpoint=True)
-        
+
         self.Aarr_noend,self.dxA_noend = np.linspace(0,self.T,self.NA,
                                                      retstep=True,
                                                      endpoint=False)
-        
+
         if self.load_all:
-                
+
             slib.generate_expansions(self)
             slib.load_coupling_expansions(self)
             slib.load_jac_sym(self)
-            
+
             rule = {**self.rule_LC,**self.rule_par}
 
             print('jac sym',self.jac_sym)
@@ -484,29 +598,29 @@ class StrongCoupling(object):
                                   modules='numpy')
 
             start = time.time();print(self.jacLC(20));end = time.time();print('jac eval time',end-start)
-            
+
             # get monodromy matrix
             self.load_monodromy()
-            
+
             # get heterogeneous terms for g, floquet e. fun.
             self.load_g_sym()
-            
+
             # get g
             self.load_g()
-            
+
             # get het. terms for z and i
             self.load_het_sym()
-            
+
             # get iPRC, iIRC.
             self.load_z()
             self.load_i()
-            
-            
+
+
             self.load_k_sym()
-            
+
             self.load_p_sym()
             self.load_p()
-        
+
             self.load_h_sym()
             self.load_h()
         
