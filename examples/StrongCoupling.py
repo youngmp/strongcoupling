@@ -25,6 +25,8 @@ from lib.interp_basic import interp_basic as interpb
 from lib.interp2d_basic import interp2d_basic as interp2db
 #from lam_vec import lam_vec
 
+from lib import fnames
+
 #import inspect
 import time
 import os
