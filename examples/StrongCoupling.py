@@ -82,9 +82,7 @@ class StrongCoupling2(object):
                  method='LSODA', # good shit                 
                  max_n=-1, # Fourier terms. -1 = no truncation
                  
-                 log_level='CRITICAL',log_file='log_nm.log',
-                 save_fig=False,
-                 
+                 save_fig=False,                 
                  recompute_list=[]):
 
         
@@ -131,22 +129,6 @@ class StrongCoupling2(object):
         self.bne,self.dbne = np.linspace(0,2*np.pi*self._n[1],NH*self._n[1],
                                          retstep=True,endpoint=True)        
 
-        self.log_level = log_level;self.log_file = log_file
-
-        if self.log_level == 'DEBUG':
-            self.log_level = logging.DEBUG
-        elif self.log_level == 'INFO':
-            self.log_level = logging.INFO
-        elif self.log_level == 'WARNING':
-            self.log_level = logging.WARNING
-        elif self.log_level == 'ERROR':
-            self.log_level = logging.ERROR
-        elif self.log_level == 'CRITICAL':
-            self.log_level = logging.CRITICAL
-
-        FORMAT = '%(asctime)s %(message)s'
-        logging.basicConfig(filename=self.log_file,level=self.log_level,
-                            format=FORMAT)
 
         system1.h['dat']={};system1.h['imp']={};system1.h['lam']={}
         system1.h['sym']={};system1.p['dat']={};system1.p['imp']={}
@@ -254,7 +236,6 @@ class StrongCoupling2(object):
         system1.G['sym'] = {}
         system1.K['sym'] = {}
         if 'k_'+system1.model_name in self.recompute_list or files_dne:
-            logging.info('* Computing G symbolic...')
 
             rule_trunc = {}
             for k in range(system1.miter,system1.miter+500):
@@ -282,7 +263,6 @@ class StrongCoupling2(object):
                       recurse=True)
                 
         else:
-            logging.info('* Loading G symbolic...')
             system1.G['sym'] = dill.load(open(system1.G['fname'],'rb'))
             system1.K['sym'] = dill.load(open(system1.K['fname'],'rb'))
 
@@ -363,7 +343,6 @@ class StrongCoupling2(object):
         eps = system1.eps
 
         if 'p_'+system1.model_name in self.recompute_list or file_dne:
-            logging.info('* Computing p symbolic...')
             print('* Computing p symbolic...')
             
             rule_trunc = {}
@@ -386,7 +365,6 @@ class StrongCoupling2(object):
                       recurse=True)
 
         else:
-            logging.info('* Loading p symbolic...')
             print('* Loading p symbolic...')
             system1.p['sym'] = dill.load(open(system1.p['fname'],'rb'))
 
@@ -524,7 +502,6 @@ class StrongCoupling2(object):
         system.h['sym'] = {}
         
         if 'h_'+system.model_name in self.recompute_list or file_dne:
-            logging.info('* Computing H symbolic...')
             print('* Computing H symbolic...')
             
             # simplify expansion for speed
@@ -532,7 +509,6 @@ class StrongCoupling2(object):
             for k in range(system.miter,system.miter+200):
                 rule_trunc.update({system.eps**k:0})
 
-            logging.info('Oscillator '+system.model_name)
             v1 = system.z['vec']; v2 = system.G['vec']
                     
             tmp = v1.dot(v2)
@@ -548,7 +524,6 @@ class StrongCoupling2(object):
             dill.dump(system.h['sym'],open(fname,'wb'),recurse=True)
                 
         else:
-            logging.info('* Loading H symbolic...')
             print('* Loading H symbolic...')
             system.h['sym'] = dill.load(open(fname,'rb'))
             
@@ -560,7 +535,6 @@ class StrongCoupling2(object):
         if 'h_data_'+system1.model_name in self.recompute_list\
            or file_dne:
             str1 = '* Computing H {}, order={}...'
-            logging.info(str1.format(system1.model_name,k))
             print(str1.format(system1.model_name,k))
 
             h_data = self.generate_h(system1,system2,k)
@@ -568,7 +542,6 @@ class StrongCoupling2(object):
 
         else:
             str1 = '* Loading H {}, order={}...'
-            logging.info(str1.format(system1.model_name,k))
             print(str1.format(system1.model_name,k))
             
             h_data = np.loadtxt(fname)
@@ -679,8 +652,6 @@ class StrongCoupling2(object):
             ax.plot(self.tLC,data[:,j],label=key)
             ax.legend()
             
-        logging.info(fn+str(k)+' ini'+str(data[0,:]))
-        logging.info(fn+str(k)+' fin'+str(data[-1,:]))
         axs[0].set_title(fn+str(k))
         plt.tight_layout()
         plt.savefig(path_loc+fn+str(k)+'.png')
