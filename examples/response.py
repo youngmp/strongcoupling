@@ -167,15 +167,8 @@ class Response(object):
             # i.e. parname (sympy) to parname_val (float/int)
             self.rule_par.update({prop:value})
             self.pardict_sym.update({prop:symvar})
-
-        if self.forcing:
-            self.pardict_sym.update({'omf':symbols('omf')})
             
         assert(not(model_name is None))
-        self.om_fix_key = 'om_fix'+str(idx)
-        assert(self.om_fix_key in pardict)
-        assert(type(self.om_fix_key) is str)
-
 
         self.model_name = model_name
 
