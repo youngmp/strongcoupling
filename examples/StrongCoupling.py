@@ -62,8 +62,11 @@ imp_fn = implemented_function
 from scipy.interpolate import interp2d
 from scipy.integrate import solve_ivp
 
-from lib.fast_interp import interp2df
+from lib.fast_interp import interp2d as interp2df
+from lib.fast_interp import interp1d as interp1df
+from scipy.integrate import quad
 
+exp = np.exp
 
 def module_exists(module_name):
     try:
@@ -444,11 +447,6 @@ class StrongCoupling2(object):
                 **system1.rule_i,**system2.rule_i,**system1.rule_g,
                 **system2.rule_g}
         
-        if self.forcing:
-            imp0 = imp_fn('forcing',system2)
-            lam0 = lambdify(self.ths[1],imp0(self.ths[1]))
-            rule.update({system2.syms[0]:imp0(self.ths[1])})
-
         ph_imp1 = system1.p['sym'][k].subs(rule)
 
         if ph_imp1 == 0: # keep just in case
@@ -457,7 +455,7 @@ class StrongCoupling2(object):
         lam1 = lambdify(self.ths,ph_imp1)        
         
         x=self.x;dx=self.dx;pfactor=self.pfactor
-        sm=np.arange(0,self.T*pfactor,dx)*m
+        sm=np.arange(0,self.system1.T*pfactor,dx)*m
         
         fac = self.om*(1-system1.idx) + system1.idx
         exp1 = exp(fac*sm*system1.kappa_val)
@@ -536,12 +534,9 @@ class StrongCoupling2(object):
         hodd = h_data[::-1] - h_data
 
         n=self._n[1];m=self._m[1]
-        #system1.h['lam'][k] = interpb(self.be,h_data,2*np.pi)
-        #system1.h['lam'][k] = interp1d(0,self.x[-1]*n,self.dx*n,
-        #                               h_data,p=True,k=9)
 
-        system1.h['lam'][k] = interp1d(self.bn[0],self.bn[-1],self.dbn,
-                                       h_data,p=True,k=5)
+        system1.h['lam'][k] = interp1df(self.bn[0],self.bn[-1],self.dbn,
+                                        h_data,p=True,k=5)
 
         if self.save_fig:    
             fig,axs = plt.subplots(figsize=(6,2))
@@ -568,38 +563,12 @@ class StrongCoupling2(object):
                 **system1.rule_g,**system2.rule_g,**system1.rule_z,
                 **system2.rule_z,**system1.rule_i,**system2.rule_i}
         
-        if self.forcing:
-            imp0 = imp_fn('forcing',system2)
-            rule.update({system2.syms[0]:imp0(self.ths[1])})
             
         h_lam = lambdify(self.ths,system1.h['sym'][k].subs(rule))
-
-        """
-        x=self.x;dx=self.dx
-        n=self._n[1];m=self._m[1]
-        
-        X,Y = np.meshgrid(x*n,x*m,indexing='ij')
-        h_integrand = h_lam(X,Y)
-        ft2 = np.fft.fft2(h_integrand)
-        # get only those in n:m indices
-        # n*i,-m*i
-        ft2_new = list([ft2[0,0]])
-        ft2_new += list(np.diag(np.flipud(ft2[1:,1:]))[::-1])
-        ft2_new = np.asarray(ft2_new)
-        ft2_new /= np.sqrt(self.NH)*2
-
-        out = np.fft.ifft(ft2_new).real/(2*np.pi*m)
-        print('h mean',np.mean(out))
-        return out
-        """
         
         bn=self.be;dbn=self.dbe
         #bn=self.be;dbn=self.dbe
         n=self._n[1];m=self._m[1]
-
-        # calculate mean
-        #X,Y = np.meshgrid(self.an,self.an*self._m[1],indexing='ij')
-        #system1._H0[k] = np.sum(h_lam(X,Y))*self.dan**2/(2*np.pi*self._m[1])**2
 
         def integrand(x,y):
             return h_lam(y+self.om*x,x)
