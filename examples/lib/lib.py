@@ -684,3 +684,4 @@ def plot(obj,option='g1'):
                  #+', piter='+str(p_iter[k]))
         ax.set_title(title)
         plt.tight_layout()
+
