@@ -5,6 +5,7 @@ Example: Goodwin circadian oscillator from Gonze et al Biophys J 2005
 
 # user-defined
 #from nmCoupling import nmCoupling as nm
+from StrongCoupling import StrongCoupling2
 from response import Response as rsp
 
 import numpy as np
@@ -50,8 +51,7 @@ def rhs(t,z,pdict,option='value',idx=''):
     
     p = pdict
     n = p['n'+idx]
-    om = pdict['om'+idx]
-    om_fix = pdict['om_fix'+idx]
+    om = pdict['om_fix'+idx]
     
     dx = p['v1'+idx]*p['k1'+idx]**n/(p['k1'+idx]**n+z**n)\
         - p['v2'+idx]*x/(p['k2'+idx]+x) + p['L'+idx]
@@ -60,9 +60,9 @@ def rhs(t,z,pdict,option='value',idx=''):
     dv = p['k7'+idx]*x - p['v8'+idx]*v/(p['k8'+idx]+v)
     
     if option in ['value','val']:
-        return om*om_fix*np.array([dx,dy,dz,dv])
+        return om*np.array([dx,dy,dz,dv])
     elif option in ['sym','symbolic']:
-        return om*om_fix*Matrix([dx,dy,dz,dv])
+        return om*Matrix([dx,dy,dz,dv])
 
 def coupling(vars_pair,pdict,option='value',idx=''):
     """
@@ -102,13 +102,12 @@ def coupling(vars_pair,pdict,option='value',idx=''):
     kc = pdict['kc'+idx]
     F = (v1+v2)/2
 
-    om = pdict['om'+idx]
-    om_fix = pdict['om_fix'+idx]
+    om = pdict['om_fix'+idx]
     
     if option in ['value','val']:
-        return om*om_fix*np.array([K*F/(kc+K*F),0,0,0])
+        return om*np.array([K*F/(kc+K*F),0,0,0])
     elif option in ['sym','symbolic']:
-        return om*om_fix*Matrix([K*F/(kc+K*F),0,0,0])
+        return om*Matrix([K*F/(kc+K*F),0,0,0])
 
 def main():
 
@@ -131,20 +130,17 @@ def main():
             'rtol':1e-12,
             'atol':1e-12,
             'rel_tol':1e-9,
-            'save_fig':True}
+            'save_fig':False}
 
     
     system1 = rsp(idx=0,model_name='gw0',**kws1)
     system2 = rsp(idx=1,model_name='gw1',**kws1)
 
-    a11 = nm(system1,system2,
-             #recompute_list=['p_data_tg0','p_data_tg1',
-             # 'h_data_tg0','h_data_tg1'],
-             #recompute_list=recompute_list,
-             _n=('om0',1),_m=('om1',1),
-             save_fig=True,
-             NP=201,
-             NH=201)
+    a11 = StrongCoupling2(system1,system2,
+                         #recompute_list=['p_data_tg0','p_data_tg1',
+                         # 'h_data_tg0','h_data_tg1'],
+                         #recompute_list=recompute_list,
+                         NH=201)
 
 
 
