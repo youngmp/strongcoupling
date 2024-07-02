@@ -77,7 +77,7 @@ class Response(object):
                  save_fig=False,
                  factor=1,
 
-                 mode='1:1'):
+                 mode='nm'):
             
         var_names = copy.deepcopy(var_names)
         pardict = copy.deepcopy(pardict)
@@ -258,6 +258,8 @@ class Response(object):
             #logging.info('* Loading LC data...')
             z = np.loadtxt(self.lc_fname)
 
+        print('* Limit cycle period = '+str(self.T))
+        
         # normalize period
         if self.mode == 'nm':
             self.T = 2*np.pi
@@ -279,8 +281,9 @@ class Response(object):
         self.lc['dat'] = z[:,1:]
         self.init = z[0,1:]
 
-        print('* Limit cycle period = '+str(self.T))
-        logging.debug('* Limit cycle period = '+str(self.T))
+        
+        print('* Limit cycle period (normalized) = '+str(self.T))
+        #logging.debug('* Limit cycle period = '+str(self.T))
                     
         # Make LC data callable from inside sympy
         imp_lc = sym.zeros(self.dim)
