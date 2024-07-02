@@ -62,6 +62,8 @@ imp_fn = implemented_function
 from scipy.interpolate import interp2d
 from scipy.integrate import solve_ivp
 
+from lib.fast_interp import interp2df
+
 
 def module_exists(module_name):
     try:
@@ -389,7 +391,7 @@ class StrongCoupling2(object):
         n=self._n[1];m=self._m[1]
         x=self.x;dx=self.dx
         
-        p_interp = interp2d([0,0],[x[-1]*n,x[-1]*m],[dx*n,dx*m],p_data,
+        p_interp = interp2df([0,0],[x[-1]*n,x[-1]*m],[dx*n,dx*m],p_data,
                             k=9,p=[True,True])
 
         ta = self.ths[0];tb = self.ths[1]
