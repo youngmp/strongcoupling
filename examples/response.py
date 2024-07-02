@@ -169,6 +169,9 @@ class Response(object):
             self.pardict_sym.update({prop:symvar})
             
         assert(not(model_name is None))
+        self.om_fix_key = 'om_fix'+str(idx)
+        assert(self.om_fix_key in pardict)
+        assert(type(self.om_fix_key) is str)
 
         self.model_name = model_name
 
@@ -258,7 +261,6 @@ class Response(object):
             #logging.info('* Loading LC data...')
             z = np.loadtxt(self.lc_fname)
 
-        print('* Limit cycle period = '+str(self.T))
         
         # normalize period
         if self.mode == 'nm':
@@ -280,8 +282,8 @@ class Response(object):
         
         self.lc['dat'] = z[:,1:]
         self.init = z[0,1:]
-
         
+        print('* Limit cycle period (original) = '+str(z[-1,0]))
         print('* Limit cycle period (normalized) = '+str(self.T))
         #logging.debug('* Limit cycle period = '+str(self.T))
                     
