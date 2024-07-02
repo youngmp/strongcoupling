@@ -90,11 +90,16 @@ class StrongCoupling2(object):
                  max_n=-1, # Fourier terms. -1 = no truncation
                  
                  save_fig=False,                 
-                 recompute_list=[]):
+                 recompute_list=[],
+                 fig_dir='fig_temp/'):
 
+        self.fig_dir = fig_dir
         
         self.save_fig = save_fig
-
+        if self.save_fig:
+            if not(os.path.exists(self.fig_dir)):
+                os.makedirs(self.fig_dir)
+        
         self._expand_kws = {'basic':True,'deep':True,'power_base':False,
                             'power_exp':False,'mul':True,'log':False,
                             'multinomial':True}
@@ -417,7 +422,7 @@ class StrongCoupling2(object):
             
             fig,axs = plt.subplots()
             axs.imshow(p_data)
-            pname = 'figs_temp/p_'
+            pname = self.fig_dir+'p_'
             pname += system1.model_name+str(k)
             pname += '_'+str(n)+str(m)
             pname += '.png'
@@ -548,7 +553,7 @@ class StrongCoupling2(object):
             ptitle += ', nm='+str(n)+str(m)
             axs.set_title(ptitle)
             
-            pname = 'figs_temp/h_'
+            pname = self.fig_dir+'h_'
             pname += system1.model_name+str(k)
             pname += '_'+str(n)+str(m)
             pname += '.png'
