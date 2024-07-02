@@ -292,10 +292,6 @@ class StrongCoupling2(object):
         system1.G['sym_fn'] = sym.flatten(fn(z,psym,option='sym',
                                              idx=system1.idx))
 
-        if self.forcing:
-            assert(z[-1,0] == system2.syms[0])
-            z = z[:-1,:]
-            dz = dz[:-1,:]
             
         
         # 0 and 1st derivative
@@ -381,19 +377,6 @@ class StrongCoupling2(object):
             
             
             p_data = self.generate_p(system1,system2,k)
-
-
-            #if not(self.forcing):
-            #p_interp0 = interp2d([0,0],[2*np.pi*self._n[1],
-            #                            2*np.pi*self._m[1]],
-            #                     [self.dan,self.dan],
-            #                     p_data,k=5,p=[True,True])
-
-            # fix indexing (see check_isostable.ipynb)
-            #X,Y = np.meshgrid(self.an*self._n[1],
-            #                  self.an*self._m[1],
-            #                  indexing='ij')
-            #p_data = p_interp0(X-self.om*Y,Y)
                 
             np.savetxt(system1.p['fnames_data'][k],p_data)
 
