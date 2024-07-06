@@ -91,9 +91,12 @@ class StrongCoupling2(object):
                  
                  save_fig=False,                 
                  recompute_list=[],
-                 fig_dir='fig_temp/'):
+                 fig_dir='fig_temp/',
+
+                 integration='quad'):
 
         self.fig_dir = fig_dir
+        self.integration = integration
         
         self.save_fig = save_fig
         if self.save_fig:
@@ -580,9 +583,14 @@ class StrongCoupling2(object):
                 
         # calculate coupling function
         h = np.zeros(self.NH)
+
+        
         for j in range(self.NH):
-            #val = np.sum(h_lam(bn[j] + self.om*bn,bn))*dbn
-            val = quad(integrand,bn[0],bn[-1],args=(bn[j],),limit=10000)[0]
+
+            if self.integration == 'quad':
+                val = quad(integrand,bn[0],bn[-1],args=(bn[j],),limit=10000)[0]
+            elif self.integration == 'riemann':
+                val = np.sum(h_lam(bn[j] + self.om*bn,bn))*dbn
 
             h[j] = val
 
