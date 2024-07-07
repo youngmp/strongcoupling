@@ -388,8 +388,10 @@ class StrongCoupling2(object):
         if 'p_data_'+system1.model_name in self.recompute_list\
            or file_dne:
             
-            
-            p_data = self.generate_p(system1,system2,k)
+            if self.integration in ['riemann','quad']:
+                p_data = self.generate_p(system1,system2,k)
+            elif self.integration in ['fft']:
+                p_data = self.generate_p_square(system1,system2,k)
                 
             np.savetxt(system1.p['fnames_data'][k],p_data)
 
@@ -403,7 +405,7 @@ class StrongCoupling2(object):
         x=self.x;dx=self.dx
         
         p_interp = interp2df([0,0],[x[-1]*n,x[-1]*m],[dx*n,dx*m],p_data,
-                            k=9,p=[True,True])
+                            k=5,p=[True,True])
 
         ta = self.ths[0];tb = self.ths[1]
         name = 'p_'+system1.model_name+'_'+str(k)
@@ -436,6 +438,50 @@ class StrongCoupling2(object):
         system1.rule_p.update({sym.Indexed('p_'+system1.model_name,k):
                                system1.p['imp'][k](ta,tb)})
 
+    def generate_p_square(self,system1,system2,k):
+        print('p order='+str(k))
+
+        n = self._n[1];m = self._m[1]
+        NP = self.NP
+        data = np.zeros([NP,NP])
+        
+        if k == 0:
+            #pA0 is 0 (no forcing function)
+            return data
+
+        kappa1 = system1.kappa_val
+
+        rule = {**system1.rule_p,**system2.rule_p,**system1.rule_par,
+                **system2.rule_par,**system1.rule_lc,**system2.rule_lc,
+                **system1.rule_i,**system2.rule_i,**system1.rule_g,
+                **system2.rule_g}
+
+        ph_imp1 = system1.p['sym'][k].subs(rule)
+
+        if ph_imp1 == 0: # keep just in case
+            return np.zeros([NP,NP])
+        
+        lam1 = lambdify(self.ths,ph_imp1)        
+        
+        x=self.x;dx=self.dx;pfactor=self.pfactor
+        sm=np.arange(0,system1.T*pfactor,dx)*m
+        
+        fac = self.om*(1-system1.idx) + system1.idx
+        exp1 = exp(fac*sm*system1.kappa_val)
+
+        g_in = np.fft.fft(exp1)
+        a_i = np.arange(NP,dtype=int)
+        
+        #for ll in range(len(an)):
+        for ll in range(len(x)):
+
+            f_in = np.fft.fft(lam1(x[ll]*n+self.om*sm,sm))
+            conv = np.fft.ifft(f_in*g_in)
+            #data[(a_i+ll)%int(n*NP),a_i] = conv[-int(m*NP):].real
+            data[(a_i+ll)%NP,a_i] = conv[-NP:].real
+            #data[ll,:] = conv[-self._m[1]*NP:].real
+
+        return fac*data*self.dan
 
     def generate_p(self,system1,system2,k):
         print('p order='+str(k))
@@ -463,7 +509,7 @@ class StrongCoupling2(object):
         lam1 = lambdify(self.ths,ph_imp1)        
         
         x=self.x;dx=self.dx;pfactor=self.pfactor
-        sm=np.arange(0,self.system1.T*pfactor,dx)*m
+        sm=np.arange(0,system1.T*pfactor,dx)*m
         
         fac = self.om*(1-system1.idx) + system1.idx
         exp1 = exp(fac*sm*system1.kappa_val)
@@ -529,7 +575,10 @@ class StrongCoupling2(object):
             str1 = '* Computing H {}, order={}...'
             print(str1.format(system1.model_name,k))
 
-            h_data = self.generate_h(system1,system2,k)
+            if self.integration in ['quad','riemann']:
+                h_data = self.generate_h(system1,system2,k)
+            elif self.integration in ['fft']:
+                h_data = self.generate_h_fft(system1,system2,k)
             np.savetxt(system1.h['fnames_data'][k],h_data)
 
         else:
@@ -542,9 +591,12 @@ class StrongCoupling2(object):
         hodd = h_data[::-1] - h_data
 
         n=self._n[1];m=self._m[1]
-
-        system1.h['lam'][k] = interp1df(self.bn[0],self.bn[-1],self.dbn,
-                                        h_data,p=True,k=5)
+        if self.integration in ['quad','riemann']:
+            system1.h['lam'][k] = interp1df(self.bn[0],self.bn[-1],self.dbn,
+                                            h_data,p=True,k=5)
+        elif self.integration in ['fft']:
+            system1.h['lam'][k] = interp1df(0,self.x[-1]*n,self.dx*n,
+                                            h_data,p=True,k=5)
 
         if self.save_fig:    
             fig,axs = plt.subplots(figsize=(6,2))
@@ -597,7 +649,34 @@ class StrongCoupling2(object):
         out = h/(2*np.pi*self._m[1])
 
         return out
+
+    def generate_h_fft(self,system1,system2,k):
+
+        rule = {**system1.rule_p,**system2.rule_p,**system1.rule_par,
+                **system2.rule_par,**system1.rule_lc,**system2.rule_lc,
+                **system1.rule_g,**system2.rule_g,**system1.rule_z,
+                **system2.rule_z,**system1.rule_i,**system2.rule_i}
+            
+        h_lam = lambdify(self.ths,system1.h['sym'][k].subs(rule))
+
+
+        x=self.x;dx=self.dx
+        n=self._n[1];m=self._m[1]
         
+        X,Y = np.meshgrid(x*n,x*m,indexing='ij')
+        h_integrand = h_lam(X,Y)
+        ft2 = np.fft.fft2(h_integrand)
+
+        ft2_new = list([ft2[0,0]])
+        ft2_new += list(np.diag(np.flipud(ft2[1:,1:]))[::-1])
+        ft2_new = np.asarray(ft2_new)
+        ft2_new /= self.NH/(2*np.pi)
+
+        out = np.fft.ifft(ft2_new).real/(2*np.pi*m)
+
+        return out
+
+    
     def fast_interp_lam(self,fn):
         """
         interp2db object (from fast_interp)
