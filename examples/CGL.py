@@ -46,13 +46,12 @@ def rhs(t, z, pdict, option='value'):
 
     x,y = z
     R2 = x**2 + y**2
+    q = pdict['q']
 
     if option == 'value':
-        return np.array([x*(1-R2)-pdict['q']*R2*y,
-                         y*(1-R2)+pdict['q']*R2*x])
+        return np.array([x*(1-R2)-q*R2*y,y*(1-R2)+q*R2*x])
     elif option == 'sym':
-        return Matrix([x*(1-R2)-pdict['q']*R2*y,
-                       y*(1-R2)+pdict['q']*R2*x])
+        return Matrix([x*(1-R2)-q*R2*y,y*(1-R2)+q*R2*x])
 
 def coupling(vars_pair, pdict, option='value'):
     """
@@ -104,23 +103,23 @@ def main():
                'd_val':1}
 
     kwargs = {'recompute_LC':False,
-              'recompute_monodromy':False,
+              'recompute_monodromy':True,
               'recompute_g_sym':False,
               'recompute_g':False,
               'recompute_het_sym':False,
               'recompute_z':False,
-              'recompute_i':True,
+              'recompute_i':False,
               'recompute_k_sym':False,
               'recompute_p_sym':False,
-              'recompute_p':False,
+              'recompute_p':True,
               'recompute_h_sym':False,
-              'recompute_h':False,
+              'recompute_h':True,
               'g_forward':False,
               'z_forward':False,
               'i_forward':[True,False,False,False,False,False,False,False,False,False],
               'dense':True,
-              'dir':'home+cgl_dat/',
-              'trunc_order':9,
+              'dir':'home+cgl_dat_strongcoup/',
+              'trunc_order':4,
               'NA':501,
               'NB':501,
               'p_iter':25,
@@ -136,8 +135,6 @@ def main():
 
     # for NIC, 3rd derivatives go away, so we only need trunc_gh=3.
     a = StrongCoupling(rhs,coupling,LC_init,var_names,pardict,**kwargs)
-
-
 
 if __name__ == "__main__":
     __spec__ = None
