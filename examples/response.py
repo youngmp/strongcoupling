@@ -292,7 +292,7 @@ class Response(object):
         for i,key in enumerate(self.var_names):
 
             fn = interp1d(self.tlc[0],self.tlc[-1],
-                          self.dtlc,self.lc['dat'][:-1,i],p=True,k=9)
+                          self.dtlc,self.lc['dat'][:-1,i],p=True,k=3)
             
             imp = imp_fn('lc'+key+'_'+str(i),self.fmod(fn))
             
@@ -618,7 +618,7 @@ class Response(object):
             for j,key in enumerate(self.var_names):
                 
                 fn = interp1d(self.tlc[0],self.tlc[-1],
-                              self.dtlc,data[:-1,j],p=True,k=9)
+                              self.dtlc,data[:-1,j],p=True,k=3)
                 imp = imp_fn('g'+key+'_'+str(i),fn)
                 
                 self.g['imp_'+key].append(imp)
@@ -736,7 +736,7 @@ class Response(object):
             for j,key in enumerate(self.var_names):
 
                 fn = interp1d(self.tlc[0],self.tlc[-1],
-                              self.dtlc,data[:-1,j],p=True,k=9)
+                              self.dtlc,data[:-1,j],p=True,k=3)
                 imp = imp_fn('z'+key+'_'+str(i),fn)
                 
                 self.z['imp_'+key].append(imp)
@@ -849,7 +849,7 @@ class Response(object):
             for j,key in enumerate(self.var_names):
 
                 fn = interp1d(self.tlc[0],self.tlc[-1],
-                              self.dtlc,data[:-1,j],p=True,k=9)
+                              self.dtlc,data[:-1,j],p=True,k=3)
                 imp = imp_fn('i'+key+'_'+str(i),fn)
                 
                 self.i['imp_'+key].append(imp)
@@ -1198,7 +1198,7 @@ class Response(object):
             else:
                 y = lam(self.tlc)
             
-            fn = interp1d(self.tlc[0],self.tlc[-1],self.dtlc,y[:-1],p=True,k=9)
+            fn = interp1d(self.tlc[0],self.tlc[-1],self.dtlc,y[:-1],p=True,k=3)
             imp = imp_fn(key,fn)
             
             # save as implemented fn
